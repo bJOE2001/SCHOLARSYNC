@@ -1,15 +1,18 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import FormInput from '../../components/forms/FormInput.vue'
+import ConfirmationDialog from '../../components/ui/ConfirmationDialog.vue'
 import { studentNavigation } from '../../data/navigation'
 import { api, getCurrentUser } from '../../services/api'
 
 const router = useRouter()
+const route = useRoute()
 const currentUser = getCurrentUser()
 const loading = ref(true)
 const submitting = ref(false)
+const showSubmitConfirmation = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const studentProfile = ref(currentUser ?? { name: 'Student' })
@@ -76,6 +79,23 @@ const applicationSteps = computed(() => [
   },
 ])
 
+function preselectProgramFromRoute() {
+  const selectedProgram = typeof route.query.program === 'string' ? route.query.program : ''
+
+  if (!selectedProgram) {
+    return
+  }
+
+  const matchingScholarship = scholarships.value.find((scholarship) => (
+    scholarship.status === 'Open' &&
+    scholarship.scholarshipName === selectedProgram
+  ))
+
+  if (matchingScholarship) {
+    application.scholarshipProgram = matchingScholarship.scholarshipName
+  }
+}
+
 function timelineBadgeClass(status) {
   if (status === 'Complete') {
     return 'bg-emerald-50 text-emerald-700 ring-emerald-200'
@@ -112,6 +132,24 @@ function completionIconClass(isComplete, isLocked = false) {
   return 'bg-indigo-700 text-white'
 }
 
+function openSubmitConfirmation() {
+  if (isSubmitDisabled.value) {
+    return
+  }
+
+  errorMessage.value = ''
+  successMessage.value = ''
+  showSubmitConfirmation.value = true
+}
+
+function closeSubmitConfirmation() {
+  if (submitting.value) {
+    return
+  }
+
+  showSubmitConfirmation.value = false
+}
+
 async function loadFormData() {
   loading.value = true
   errorMessage.value = ''
@@ -126,6 +164,7 @@ async function loadFormData() {
     studentProfile.value = profile
     scholarships.value = scholarshipList
     recentNotifications.value = dashboard?.recentNotifications ?? []
+    preselectProgramFromRoute()
   } catch (error) {
     errorMessage.value = error.message
   } finally {
@@ -153,8 +192,10 @@ async function submitApplication() {
     })
 
     successMessage.value = 'Application submitted successfully.'
+    showSubmitConfirmation.value = false
     router.push('/student/status')
   } catch (error) {
+    showSubmitConfirmation.value = false
     errorMessage.value = error.message
   } finally {
     submitting.value = false
@@ -175,20 +216,20 @@ onMounted(loadFormData)
     :notification-count="recentNotifications.length"
     :notification-items="recentNotifications"
   >
-    <section v-if="errorMessage" class="mb-5 rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+    <section v-if="errorMessage" class="mb-4 rounded-md bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700">
       {{ errorMessage }}
     </section>
 
-    <section v-if="successMessage" class="mb-5 rounded-md bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+    <section v-if="successMessage" class="mb-4 rounded-md bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700">
       {{ successMessage }}
     </section>
 
-    <form class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm" @submit.prevent="submitApplication">
-      <div class="border-b border-slate-200 p-5 sm:p-6">
-        <p class="text-sm font-bold uppercase tracking-[0.18em] text-indigo-700">Scholarship Application</p>
-        <div class="mt-2 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+    <form class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm" @submit.prevent="openSubmitConfirmation">
+      <div class="border-b border-slate-200 p-4 sm:p-5">
+        <p class="text-xs font-bold uppercase tracking-[0.18em] text-indigo-700">Scholarship Application</p>
+        <div class="mt-1 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 class="text-2xl font-bold text-slate-950">Application Form</h2>
+            <h2 class="text-xl font-bold text-slate-950">Application Form</h2>
             <p class="mt-1 text-sm text-slate-500">
               Complete each section in order. Locked sections will open after the previous requirements are filled.
             </p>
@@ -199,19 +240,19 @@ onMounted(loadFormData)
         </div>
       </div>
 
-      <div v-if="loading" class="p-6 text-sm font-semibold text-slate-500">
+      <div v-if="loading" class="p-4 text-sm font-semibold text-slate-500">
         Loading application form...
       </div>
 
       <div v-else>
-        <section class="space-y-6 p-5 sm:p-6 lg:p-8">
-          <section class="rounded-md border border-slate-200 p-5">
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div class="flex items-start gap-4">
-                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md text-sm font-black" :class="completionIconClass(hasProgram)">
+        <section class="space-y-4 p-4 lg:p-5">
+          <section class="rounded-md border border-slate-200 p-4">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="flex items-start gap-3">
+                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md text-sm font-black" :class="completionIconClass(hasProgram)">
                   <svg
                     v-if="hasProgram"
-                    class="h-5 w-5"
+                    class="h-4 w-4"
                     viewBox="0 0 24 24"
                     fill="none"
                     aria-hidden="true"
@@ -227,27 +268,27 @@ onMounted(loadFormData)
                   <span v-else>1</span>
                 </span>
                 <div>
-                  <p class="text-sm font-bold uppercase tracking-[0.18em] text-indigo-700">Program Selection</p>
-                  <h3 class="mt-2 flex flex-wrap items-center gap-2 text-xl font-bold text-slate-950">
+                  <p class="text-xs font-bold uppercase tracking-[0.18em] text-indigo-700">Program Selection</p>
+                  <h3 class="mt-1 flex flex-wrap items-center gap-2 text-lg font-bold text-slate-950">
                     Choose scholarship program
-                    <span v-if="hasProgram" class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
+                    <span v-if="hasProgram" class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
                       <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
                       </svg>
                       Checked
                     </span>
                   </h3>
-                  <p class="mt-2 text-sm leading-6 text-slate-500">
+                  <p class="mt-1 text-sm leading-5 text-slate-500">
                     Select the scholarship program where you want to submit this application.
                   </p>
                 </div>
               </div>
-              <span class="inline-flex rounded-md px-3 py-1 text-xs font-bold ring-1" :class="timelineBadgeClass(applicationSteps[0].status)">
+              <span class="inline-flex rounded-md px-2.5 py-0.5 text-xs font-bold ring-1" :class="timelineBadgeClass(applicationSteps[0].status)">
                 {{ applicationSteps[0].status }}
               </span>
             </div>
 
-            <div class="mt-6 grid gap-5 md:grid-cols-2">
+            <div class="mt-4 grid gap-4 md:grid-cols-2">
               <FormInput
                 id="scholarship-program"
                 v-model="application.scholarshipProgram"
@@ -258,16 +299,16 @@ onMounted(loadFormData)
           </section>
 
           <section
-            class="rounded-md border p-5 transition"
+            class="rounded-md border p-4 transition"
             :class="isStudentInfoLocked ? 'border-slate-200 bg-slate-50 opacity-70' : 'border-slate-200 bg-white'"
           >
             <fieldset :disabled="isStudentInfoLocked" class="min-w-0">
-              <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex items-start gap-4">
-                  <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md text-sm font-black" :class="completionIconClass(hasConfirmedInformation, isStudentInfoLocked)">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex items-start gap-3">
+                  <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md text-sm font-black" :class="completionIconClass(hasConfirmedInformation, isStudentInfoLocked)">
                     <svg
                       v-if="hasConfirmedInformation"
-                      class="h-5 w-5"
+                      class="h-4 w-4"
                       viewBox="0 0 24 24"
                       fill="none"
                       aria-hidden="true"
@@ -283,50 +324,50 @@ onMounted(loadFormData)
                     <span v-else>2</span>
                   </span>
                   <div>
-                    <p class="text-sm font-bold uppercase tracking-[0.18em]" :class="isStudentInfoLocked ? 'text-slate-400' : 'text-indigo-700'">Student Information</p>
-                    <h3 class="mt-2 flex flex-wrap items-center gap-2 text-xl font-bold text-slate-950">
+                    <p class="text-xs font-bold uppercase tracking-[0.18em]" :class="isStudentInfoLocked ? 'text-slate-400' : 'text-indigo-700'">Student Information</p>
+                    <h3 class="mt-1 flex flex-wrap items-center gap-2 text-lg font-bold text-slate-950">
                       Review applicant summary
-                      <span v-if="hasConfirmedInformation" class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
+                      <span v-if="hasConfirmedInformation" class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
                         <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                           <path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
                         Checked
                       </span>
                     </h3>
-                    <p class="mt-2 text-sm leading-6 text-slate-500">
+                    <p class="mt-1 text-sm leading-5 text-slate-500">
                       This section unlocks after selecting a scholarship program.
                     </p>
                   </div>
                 </div>
-                <span class="inline-flex rounded-md px-3 py-1 text-xs font-bold ring-1" :class="timelineBadgeClass(applicationSteps[1].status)">
+                <span class="inline-flex rounded-md px-2.5 py-0.5 text-xs font-bold ring-1" :class="timelineBadgeClass(applicationSteps[1].status)">
                   {{ applicationSteps[1].status }}
                 </span>
               </div>
 
-              <div v-if="isStudentInfoLocked" class="mt-5 rounded-md border border-dashed border-slate-300 bg-white p-4 text-sm font-semibold text-slate-500">
+              <div v-if="isStudentInfoLocked" class="mt-4 rounded-md border border-dashed border-slate-300 bg-white p-3 text-sm font-semibold text-slate-500">
                 Select a scholarship program first to unlock this section.
               </div>
 
-              <div class="mt-6 grid gap-4 md:grid-cols-2">
-                <div class="border-b border-slate-200 pb-4">
+              <div class="mt-4 grid gap-3 md:grid-cols-2">
+                <div class="border-b border-slate-200 pb-3">
                   <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Student Name</p>
                   <p class="mt-1 text-sm font-semibold text-slate-950">{{ studentProfile.name }}</p>
                 </div>
-                <div class="border-b border-slate-200 pb-4">
+                <div class="border-b border-slate-200 pb-3">
                   <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Email</p>
                   <p class="mt-1 text-sm font-semibold text-slate-950">{{ studentProfile.email }}</p>
                 </div>
-                <div class="border-b border-slate-200 pb-4">
+                <div class="border-b border-slate-200 pb-3">
                   <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Program</p>
                   <p class="mt-1 text-sm font-semibold text-slate-950">{{ studentProfile.program }}</p>
                 </div>
-                <div class="border-b border-slate-200 pb-4">
+                <div class="border-b border-slate-200 pb-3">
                   <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Phone</p>
                   <p class="mt-1 text-sm font-semibold text-slate-950">{{ studentProfile.phone }}</p>
                 </div>
               </div>
 
-              <label class="mt-5 flex items-start gap-3 rounded-md bg-slate-50 p-4 text-sm font-semibold text-slate-700">
+              <label class="mt-4 flex items-start gap-3 rounded-md bg-slate-50 p-3 text-sm font-semibold text-slate-700">
                 <input
                   v-model="application.informationConfirmed"
                   type="checkbox"
@@ -338,16 +379,16 @@ onMounted(loadFormData)
           </section>
 
           <section
-            class="rounded-md border p-5 transition"
+            class="rounded-md border p-4 transition"
             :class="isAcademicLocked ? 'border-slate-200 bg-slate-50 opacity-70' : 'border-slate-200 bg-white'"
           >
             <fieldset :disabled="isAcademicLocked" class="min-w-0">
-              <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex items-start gap-4">
-                  <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md text-sm font-black" :class="completionIconClass(hasAcademicDetails, isAcademicLocked)">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex items-start gap-3">
+                  <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md text-sm font-black" :class="completionIconClass(hasAcademicDetails, isAcademicLocked)">
                     <svg
                       v-if="hasAcademicDetails"
-                      class="h-5 w-5"
+                      class="h-4 w-4"
                       viewBox="0 0 24 24"
                       fill="none"
                       aria-hidden="true"
@@ -363,10 +404,10 @@ onMounted(loadFormData)
                     <span v-else>3</span>
                   </span>
                   <div>
-                    <p class="text-sm font-bold uppercase tracking-[0.18em]" :class="isAcademicLocked ? 'text-slate-400' : 'text-indigo-700'">Academic and Personal Details</p>
-                    <h3 class="mt-2 flex flex-wrap items-center gap-2 text-xl font-bold text-slate-950">
+                    <p class="text-xs font-bold uppercase tracking-[0.18em]" :class="isAcademicLocked ? 'text-slate-400' : 'text-indigo-700'">Academic and Personal Details</p>
+                    <h3 class="mt-1 flex flex-wrap items-center gap-2 text-lg font-bold text-slate-950">
                       Enter academic information
-                      <span v-if="hasAcademicDetails" class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
+                      <span v-if="hasAcademicDetails" class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
                         <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                           <path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
@@ -378,16 +419,16 @@ onMounted(loadFormData)
                     </p>
                   </div>
                 </div>
-                <span class="inline-flex rounded-md px-3 py-1 text-xs font-bold ring-1" :class="timelineBadgeClass(applicationSteps[2].status)">
+                <span class="inline-flex rounded-md px-2.5 py-0.5 text-xs font-bold ring-1" :class="timelineBadgeClass(applicationSteps[2].status)">
                   {{ applicationSteps[2].status }}
                 </span>
               </div>
 
-              <div v-if="isAcademicLocked" class="mt-5 rounded-md border border-dashed border-slate-300 bg-white p-4 text-sm font-semibold text-slate-500">
+              <div v-if="isAcademicLocked" class="mt-4 rounded-md border border-dashed border-slate-300 bg-white p-3 text-sm font-semibold text-slate-500">
                 Confirm your student information first to unlock academic details.
               </div>
 
-              <div class="mt-6 grid gap-5 md:grid-cols-2">
+              <div class="mt-4 grid gap-4 md:grid-cols-2">
                 <FormInput id="gpa" v-model="application.gpa" label="GPA" placeholder="Example: 1.45" />
                 <FormInput id="year-level" v-model="application.yearLevel" label="Year Level" :options="yearLevelOptions" />
                 <div class="md:col-span-2">
@@ -398,16 +439,16 @@ onMounted(loadFormData)
           </section>
 
           <section
-            class="rounded-md border p-5 transition"
+            class="rounded-md border p-4 transition"
             :class="isReasonLocked ? 'border-slate-200 bg-slate-50 opacity-70' : 'border-slate-200 bg-white'"
           >
             <fieldset :disabled="isReasonLocked" class="min-w-0">
-              <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex items-start gap-4">
-                  <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md text-sm font-black" :class="completionIconClass(hasReason, isReasonLocked)">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex items-start gap-3">
+                  <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md text-sm font-black" :class="completionIconClass(hasReason, isReasonLocked)">
                     <svg
                       v-if="hasReason"
-                      class="h-5 w-5"
+                      class="h-4 w-4"
                       viewBox="0 0 24 24"
                       fill="none"
                       aria-hidden="true"
@@ -423,42 +464,42 @@ onMounted(loadFormData)
                     <span v-else>4</span>
                   </span>
                   <div>
-                    <p class="text-sm font-bold uppercase tracking-[0.18em]" :class="isReasonLocked ? 'text-slate-400' : 'text-indigo-700'">Reason and Review</p>
-                    <h3 class="mt-2 flex flex-wrap items-center gap-2 text-xl font-bold text-slate-950">
+                    <p class="text-xs font-bold uppercase tracking-[0.18em]" :class="isReasonLocked ? 'text-slate-400' : 'text-indigo-700'">Reason and Review</p>
+                    <h3 class="mt-1 flex flex-wrap items-center gap-2 text-lg font-bold text-slate-950">
                       Complete your application statement
-                      <span v-if="hasReason" class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
+                      <span v-if="hasReason" class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
                         <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                           <path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
                         Checked
                       </span>
                     </h3>
-                    <p class="mt-2 text-sm leading-6 text-slate-500">
+                    <p class="mt-1 text-sm leading-5 text-slate-500">
                       This section unlocks after completing the academic details.
                     </p>
                   </div>
                 </div>
-                <span class="inline-flex rounded-md px-3 py-1 text-xs font-bold ring-1" :class="timelineBadgeClass(applicationSteps[3].status)">
+                <span class="inline-flex rounded-md px-2.5 py-0.5 text-xs font-bold ring-1" :class="timelineBadgeClass(applicationSteps[3].status)">
                   {{ applicationSteps[3].status }}
                 </span>
               </div>
 
-              <div v-if="isReasonLocked" class="mt-5 rounded-md border border-dashed border-slate-300 bg-white p-4 text-sm font-semibold text-slate-500">
+              <div v-if="isReasonLocked" class="mt-4 rounded-md border border-dashed border-slate-300 bg-white p-3 text-sm font-semibold text-slate-500">
                 Fill in GPA, year level, and address first to unlock the reason section.
               </div>
 
-              <div class="mt-6">
+              <div class="mt-4">
                 <FormInput
                   id="reason"
                   v-model="application.reason"
                   label="Reason for Applying"
                   placeholder="Briefly explain why you are applying for this scholarship."
                   textarea
-                  :rows="6"
+                  :rows="4"
                 />
               </div>
 
-              <div class="mt-8 grid gap-4 border-t border-slate-200 pt-6 md:grid-cols-2">
+              <div class="mt-5 grid gap-3 border-t border-slate-200 pt-4 md:grid-cols-2">
                 <div>
                   <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Scholarship Program</p>
                   <p class="mt-1 text-sm font-semibold text-slate-950">{{ application.scholarshipProgram || 'Not selected yet' }}</p>
@@ -481,13 +522,13 @@ onMounted(loadFormData)
         </section>
       </div>
 
-      <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
         <p class="text-sm font-semibold text-slate-500">
           {{ isSubmitDisabled ? 'Complete all required sections to submit your application.' : 'All sections are complete. You can submit your application.' }}
         </p>
         <button
           type="submit"
-          class="rounded-md bg-indigo-700 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+          class="rounded-md bg-indigo-700 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
           :disabled="isSubmitDisabled || submitting"
         >
           {{ submitting ? 'Submitting...' : 'Submit Application' }}
@@ -495,4 +536,15 @@ onMounted(loadFormData)
       </div>
     </form>
   </DashboardLayout>
+
+  <ConfirmationDialog
+    :show="showSubmitConfirmation"
+    title="Submit this application?"
+    :message="`Your application for ${application.scholarshipProgram || 'the selected scholarship'} will be sent for review.`"
+    confirm-label="Submit application"
+    cancel-label="Review again"
+    :loading="submitting"
+    @confirm="submitApplication"
+    @close="closeSubmitConfirmation"
+  />
 </template>

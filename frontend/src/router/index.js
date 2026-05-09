@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LandingPage from '../pages/LandingPage.vue'
+import HowToApplyPage from '../pages/HowToApplyPage.vue'
 import LoginPage from '../pages/LoginPage.vue'
 import StudentRegistrationPage from '../pages/StudentRegistrationPage.vue'
 import StudentDashboardPage from '../pages/student/StudentDashboardPage.vue'
@@ -22,6 +23,7 @@ import AnnouncementsPage from '../pages/AnnouncementsPage.vue'
 
 const routes = [
   { path: '/', name: 'landing', component: LandingPage },
+  { path: '/how-to-apply', name: 'how-to-apply', component: HowToApplyPage },
   { path: '/login', name: 'login', component: LoginPage },
   { path: '/register', name: 'register', component: StudentRegistrationPage },
   { path: '/student', redirect: '/student/dashboard' },

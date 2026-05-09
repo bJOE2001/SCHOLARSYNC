@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import DataTable from '../../components/ui/DataTable.vue'
+import ConfirmationDialog from '../../components/ui/ConfirmationDialog.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
 import { api, getCurrentUser } from '../../services/api'
@@ -11,6 +12,8 @@ const route = useRoute()
 const currentUser = getCurrentUser()
 const application = ref(null)
 const loading = ref(true)
+const updatingStatus = ref(false)
+const pendingStatus = ref('')
 const errorMessage = ref('')
 
 const relatedDocuments = computed(() => {
@@ -23,6 +26,39 @@ const documentColumns = [
   { key: 'uploadDate', label: 'Upload Date' },
   { key: 'verificationStatus', label: 'Status' },
 ]
+
+const statusDialogTitle = computed(() => pendingStatus.value ? `${pendingStatus.value} application?` : 'Update application status?')
+const statusDialogMessage = computed(() => {
+  if (!application.value || !pendingStatus.value) {
+    return ''
+  }
+
+  return `${application.value.applicantName}'s application will be marked as ${pendingStatus.value}.`
+})
+const statusDialogTone = computed(() => {
+  if (pendingStatus.value === 'Rejected') {
+    return 'danger'
+  }
+
+  if (pendingStatus.value === 'For Revision') {
+    return 'warning'
+  }
+
+  return 'primary'
+})
+
+function openStatusConfirmation(status) {
+  errorMessage.value = ''
+  pendingStatus.value = status
+}
+
+function closeStatusConfirmation() {
+  if (updatingStatus.value) {
+    return
+  }
+
+  pendingStatus.value = ''
+}
 
 async function loadApplication() {
   loading.value = true
@@ -43,6 +79,7 @@ async function setStatus(status) {
   }
 
   errorMessage.value = ''
+  updatingStatus.value = true
 
   try {
     application.value = await api.updateApplicationStatus(application.value.id, {
@@ -53,9 +90,21 @@ async function setStatus(status) {
           ? 'Application was rejected after review.'
           : 'Please revise the flagged requirements.',
     })
+    pendingStatus.value = ''
   } catch (error) {
+    pendingStatus.value = ''
     errorMessage.value = error.message
+  } finally {
+    updatingStatus.value = false
   }
+}
+
+function confirmStatusChange() {
+  if (!pendingStatus.value) {
+    return
+  }
+
+  setStatus(pendingStatus.value)
 }
 
 onMounted(loadApplication)
@@ -90,9 +139,9 @@ onMounted(loadApplication)
         </div>
         <div class="flex flex-wrap gap-2">
           <StatusBadge :status="application.status" />
-          <button type="button" class="rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700" @click="setStatus('Approved')">Approve</button>
-          <button type="button" class="rounded-md bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700" @click="setStatus('Rejected')">Reject</button>
-          <button type="button" class="rounded-md bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600" @click="setStatus('For Revision')">Request Revision</button>
+          <button type="button" class="rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700" @click="openStatusConfirmation('Approved')">Approve</button>
+          <button type="button" class="rounded-md bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700" @click="openStatusConfirmation('Rejected')">Reject</button>
+          <button type="button" class="rounded-md bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600" @click="openStatusConfirmation('For Revision')">Request Revision</button>
         </div>
       </header>
 
@@ -190,4 +239,16 @@ onMounted(loadApplication)
       </RouterLink>
     </section>
   </DashboardLayout>
+
+  <ConfirmationDialog
+    :show="Boolean(pendingStatus)"
+    :title="statusDialogTitle"
+    :message="statusDialogMessage"
+    confirm-label="Update status"
+    cancel-label="Cancel"
+    :tone="statusDialogTone"
+    :loading="updatingStatus"
+    @confirm="confirmStatusChange"
+    @close="closeStatusConfirmation"
+  />
 </template>

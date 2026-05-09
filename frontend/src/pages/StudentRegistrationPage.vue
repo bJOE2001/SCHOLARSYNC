@@ -1,10 +1,11 @@
 <script setup>
 import { reactive, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import FormInput from '../components/forms/FormInput.vue'
 import { api } from '../services/api'
 
 const router = useRouter()
+const route = useRoute()
 const isSubmitting = ref(false)
 const errorMessage = ref('')
 
@@ -19,13 +20,6 @@ const form = reactive({
   confirmPassword: '',
 })
 
-const programOptions = [
-  { label: 'BS Information Technology', value: 'BS Information Technology' },
-  { label: 'BS Computer Science', value: 'BS Computer Science' },
-  { label: 'BS Information Systems', value: 'BS Information Systems' },
-  { label: 'BS Data Science', value: 'BS Data Science' },
-]
-
 const yearLevelOptions = [
   { label: '1st Year', value: '1st Year' },
   { label: '2nd Year', value: '2nd Year' },
@@ -39,7 +33,14 @@ async function submitRegistration() {
 
   try {
     await api.register(form)
-    router.push('/student/dashboard')
+    router.push(route.query.redirect
+      ? {
+          path: String(route.query.redirect),
+          query: {
+            program: route.query.program,
+          },
+        }
+      : '/student/dashboard')
   } catch (error) {
     errorMessage.value = error.message
   } finally {
@@ -67,7 +68,7 @@ async function submitRegistration() {
         <FormInput id="last-name" v-model="form.lastName" label="Last Name" placeholder="Mendoza" />
         <FormInput id="email" v-model="form.email" label="Email" type="email" placeholder="alyssa@college.edu" />
         <FormInput id="phone" v-model="form.phone" label="Phone Number" placeholder="0917 000 0000" />
-        <FormInput id="program" v-model="form.program" label="Program of Study" :options="programOptions" />
+        <FormInput id="program" v-model="form.program" label="Program of Study" placeholder="Example: BS Information Technology" />
         <FormInput id="year-level" v-model="form.yearLevel" label="Year Level" :options="yearLevelOptions" />
         <FormInput id="password" v-model="form.password" label="Password" type="password" placeholder="Create a password" />
         <FormInput id="confirm-password" v-model="form.confirmPassword" label="Confirm Password" type="password" placeholder="Confirm your password" />

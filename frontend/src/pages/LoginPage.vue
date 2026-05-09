@@ -1,10 +1,11 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import FormInput from '../components/forms/FormInput.vue'
 import { api } from '../services/api'
 
 const router = useRouter()
+const route = useRoute()
 const email = ref('')
 const password = ref('')
 const role = ref('student')
@@ -17,6 +18,26 @@ const roleOptions = [
 ]
 
 const dashboardPath = computed(() => (role.value === 'administrator' ? '/admin/dashboard' : '/student/dashboard'))
+const registrationLink = computed(() => ({
+  path: '/register',
+  query: {
+    redirect: route.query.redirect,
+    program: route.query.program,
+  },
+}))
+
+const postLoginRoute = computed(() => {
+  if (role.value !== 'student' || !route.query.redirect) {
+    return dashboardPath.value
+  }
+
+  return {
+    path: String(route.query.redirect),
+    query: {
+      program: route.query.program,
+    },
+  }
+})
 
 async function submitLogin() {
   errorMessage.value = ''
@@ -29,7 +50,7 @@ async function submitLogin() {
       role: role.value,
     })
 
-    router.push(dashboardPath.value)
+    router.push(postLoginRoute.value)
   } catch (error) {
     errorMessage.value = error.message
   } finally {
@@ -85,7 +106,7 @@ async function submitLogin() {
 
       <p class="mt-6 text-center text-sm text-slate-500">
         New applicant?
-        <RouterLink to="/register" class="font-bold text-indigo-700 hover:text-indigo-800">
+        <RouterLink :to="registrationLink" class="font-bold text-indigo-700 hover:text-indigo-800">
           Create an account
         </RouterLink>
       </p>

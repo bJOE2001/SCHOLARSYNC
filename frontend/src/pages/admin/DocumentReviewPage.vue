@@ -1,13 +1,16 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import DataTable from '../../components/ui/DataTable.vue'
+import ConfirmationDialog from '../../components/ui/ConfirmationDialog.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
 import { api, getCurrentUser } from '../../services/api'
 
 const submittedDocuments = ref([])
 const loading = ref(true)
+const updatingDocument = ref(false)
+const pendingDocumentStatus = ref(null)
 const errorMessage = ref('')
 const currentUser = getCurrentUser()
 
@@ -19,6 +22,37 @@ const columns = [
   { key: 'verificationStatus', label: 'Verification Status' },
   { key: 'actions', label: 'Actions' },
 ]
+
+const documentStatusDialogTitle = computed(() => {
+  const pending = pendingDocumentStatus.value
+
+  return pending ? `${pending.verificationStatus} document?` : 'Update document status?'
+})
+
+const documentStatusDialogMessage = computed(() => {
+  const pending = pendingDocumentStatus.value
+
+  if (!pending) {
+    return ''
+  }
+
+  return `${pending.document.documentType} for ${pending.document.studentName} will be marked as ${pending.verificationStatus}.`
+})
+
+const documentStatusDialogTone = computed(() => pendingDocumentStatus.value?.verificationStatus === 'For Revision' ? 'warning' : 'primary')
+
+function openDocumentStatusConfirmation(document, verificationStatus) {
+  errorMessage.value = ''
+  pendingDocumentStatus.value = { document, verificationStatus }
+}
+
+function closeDocumentStatusConfirmation() {
+  if (updatingDocument.value) {
+    return
+  }
+
+  pendingDocumentStatus.value = null
+}
 
 async function loadDocuments() {
   loading.value = true
@@ -35,6 +69,7 @@ async function loadDocuments() {
 
 async function setDocumentStatus(document, verificationStatus) {
   errorMessage.value = ''
+  updatingDocument.value = true
 
   try {
     const updated = await api.updateDocumentStatus(document.id, {
@@ -45,9 +80,21 @@ async function setDocumentStatus(document, verificationStatus) {
     })
 
     submittedDocuments.value = submittedDocuments.value.map((item) => item.id === updated.id ? updated : item)
+    pendingDocumentStatus.value = null
   } catch (error) {
+    pendingDocumentStatus.value = null
     errorMessage.value = error.message
+  } finally {
+    updatingDocument.value = false
   }
+}
+
+function confirmDocumentStatusChange() {
+  if (!pendingDocumentStatus.value) {
+    return
+  }
+
+  setDocumentStatus(pendingDocumentStatus.value.document, pendingDocumentStatus.value.verificationStatus)
 }
 
 onMounted(loadDocuments)
@@ -91,10 +138,22 @@ onMounted(loadDocuments)
           >
             View
           </RouterLink>
-          <button type="button" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700" @click="setDocumentStatus(row, 'Verified')">Verify</button>
-          <button type="button" class="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600" @click="setDocumentStatus(row, 'For Revision')">Request Revision</button>
+          <button type="button" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700" @click="openDocumentStatusConfirmation(row, 'Verified')">Verify</button>
+          <button type="button" class="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600" @click="openDocumentStatusConfirmation(row, 'For Revision')">Request Revision</button>
         </div>
       </template>
     </DataTable>
   </DashboardLayout>
+
+  <ConfirmationDialog
+    :show="Boolean(pendingDocumentStatus)"
+    :title="documentStatusDialogTitle"
+    :message="documentStatusDialogMessage"
+    confirm-label="Update document"
+    cancel-label="Cancel"
+    :tone="documentStatusDialogTone"
+    :loading="updatingDocument"
+    @confirm="confirmDocumentStatusChange"
+    @close="closeDocumentStatusConfirmation"
+  />
 </template>
