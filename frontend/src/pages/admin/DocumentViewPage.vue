@@ -1,7 +1,8 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
+import ConfirmationDialog from '../../components/ui/ConfirmationDialog.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
 import { api, getCurrentUser } from '../../services/api'
@@ -11,7 +12,32 @@ const currentUser = getCurrentUser()
 const document = ref(null)
 const applicant = ref(null)
 const loading = ref(true)
+const updatingDocument = ref(false)
+const pendingVerificationStatus = ref('')
 const errorMessage = ref('')
+
+const documentStatusDialogTitle = computed(() => pendingVerificationStatus.value ? `${pendingVerificationStatus.value} document?` : 'Update document status?')
+const documentStatusDialogMessage = computed(() => {
+  if (!document.value || !pendingVerificationStatus.value) {
+    return ''
+  }
+
+  return `${document.value.documentType} for ${document.value.studentName} will be marked as ${pendingVerificationStatus.value}.`
+})
+const documentStatusDialogTone = computed(() => pendingVerificationStatus.value === 'For Revision' ? 'warning' : 'primary')
+
+function openDocumentStatusConfirmation(verificationStatus) {
+  errorMessage.value = ''
+  pendingVerificationStatus.value = verificationStatus
+}
+
+function closeDocumentStatusConfirmation() {
+  if (updatingDocument.value) {
+    return
+  }
+
+  pendingVerificationStatus.value = ''
+}
 
 async function loadDocument() {
   loading.value = true
@@ -35,6 +61,7 @@ async function setDocumentStatus(verificationStatus) {
   }
 
   errorMessage.value = ''
+  updatingDocument.value = true
 
   try {
     document.value = await api.updateDocumentStatus(document.value.id, {
@@ -43,9 +70,21 @@ async function setDocumentStatus(verificationStatus) {
         ? 'Document is readable and matches applicant details.'
         : 'Please upload a clearer copy for verification.',
     })
+    pendingVerificationStatus.value = ''
   } catch (error) {
+    pendingVerificationStatus.value = ''
     errorMessage.value = error.message
+  } finally {
+    updatingDocument.value = false
   }
+}
+
+function confirmDocumentStatusChange() {
+  if (!pendingVerificationStatus.value) {
+    return
+  }
+
+  setDocumentStatus(pendingVerificationStatus.value)
 }
 
 onMounted(loadDocument)
@@ -80,8 +119,8 @@ onMounted(loadDocument)
         </div>
         <div class="flex flex-wrap gap-2">
           <StatusBadge :status="document.verificationStatus" />
-          <button type="button" class="rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700" @click="setDocumentStatus('Verified')">Verify</button>
-          <button type="button" class="rounded-md bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600" @click="setDocumentStatus('For Revision')">Request Revision</button>
+          <button type="button" class="rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700" @click="openDocumentStatusConfirmation('Verified')">Verify</button>
+          <button type="button" class="rounded-md bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600" @click="openDocumentStatusConfirmation('For Revision')">Request Revision</button>
         </div>
       </header>
 
@@ -181,4 +220,16 @@ onMounted(loadDocument)
       </RouterLink>
     </section>
   </DashboardLayout>
+
+  <ConfirmationDialog
+    :show="Boolean(pendingVerificationStatus)"
+    :title="documentStatusDialogTitle"
+    :message="documentStatusDialogMessage"
+    confirm-label="Update document"
+    cancel-label="Cancel"
+    :tone="documentStatusDialogTone"
+    :loading="updatingDocument"
+    @confirm="confirmDocumentStatusChange"
+    @close="closeDocumentStatusConfirmation"
+  />
 </template>

@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import DashboardLayout from '../layouts/DashboardLayout.vue'
 import FormInput from '../components/forms/FormInput.vue'
+import ConfirmationDialog from '../components/ui/ConfirmationDialog.vue'
 import StatusBadge from '../components/ui/StatusBadge.vue'
 import { adminNavigation, studentNavigation } from '../data/navigation'
 import { api, getCurrentUser } from '../services/api'
@@ -14,6 +15,7 @@ const announcements = ref([])
 const recentNotifications = ref([])
 const loading = ref(true)
 const submitting = ref(false)
+const showPublishConfirmation = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const studentProfile = ref(currentUser ?? { name: 'Student' })
@@ -58,6 +60,20 @@ const layoutConfig = computed(() => {
   }
 })
 
+function openPublishConfirmation() {
+  errorMessage.value = ''
+  successMessage.value = ''
+  showPublishConfirmation.value = true
+}
+
+function closePublishConfirmation() {
+  if (submitting.value) {
+    return
+  }
+
+  showPublishConfirmation.value = false
+}
+
 async function loadAnnouncements() {
   loading.value = true
   errorMessage.value = ''
@@ -86,6 +102,7 @@ async function publishAnnouncement() {
   try {
     await api.createAnnouncement(form)
     successMessage.value = 'Announcement published successfully.'
+    showPublishConfirmation.value = false
     Object.assign(form, {
       title: '',
       message: '',
@@ -126,7 +143,7 @@ onMounted(loadAnnouncements)
       <p class="text-sm font-bold uppercase tracking-[0.18em] text-indigo-700">Create Announcement</p>
       <h2 class="mt-2 text-xl font-bold text-slate-950">Publish an update</h2>
 
-      <form class="mt-6 grid gap-5 md:grid-cols-2" @submit.prevent="publishAnnouncement">
+      <form class="mt-6 grid gap-5 md:grid-cols-2" @submit.prevent="openPublishConfirmation">
         <FormInput id="announcement-title" v-model="form.title" label="Title" placeholder="Scholarship renewal window" />
         <FormInput id="announcement-audience" v-model="form.audience" label="Audience" :options="audienceOptions" />
         <FormInput id="announcement-date" v-model="form.date" label="Date" type="date" />
@@ -184,4 +201,15 @@ onMounted(loadAnnouncements)
       </div>
     </section>
   </DashboardLayout>
+
+  <ConfirmationDialog
+    :show="showPublishConfirmation"
+    title="Publish this announcement?"
+    :message="`This will send the announcement to ${form.audience || 'the selected audience'}.`"
+    confirm-label="Yes, publish"
+    cancel-label="Cancel"
+    :loading="submitting"
+    @confirm="publishAnnouncement"
+    @close="closePublishConfirmation"
+  />
 </template>

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import UploadCard from '../../components/uploads/UploadCard.vue'
+import ConfirmationDialog from '../../components/ui/ConfirmationDialog.vue'
 import { studentNavigation } from '../../data/navigation'
 import { api, getCurrentUser } from '../../services/api'
 
@@ -14,8 +15,16 @@ const profile = ref(currentUser ?? { name: 'Student' })
 const uploadDocuments = ref([])
 const currentApplication = ref(null)
 const recentNotifications = ref([])
+const pendingUpload = ref(null)
 
 const studentProfile = computed(() => profile.value)
+const uploadConfirmationMessage = computed(() => {
+  if (!pendingUpload.value) {
+    return ''
+  }
+
+  return `${pendingUpload.value.file.name} will be uploaded as ${pendingUpload.value.documentType}.`
+})
 
 const fallbackRequiredDocuments = [
   'Certificate of Indigency',
@@ -38,6 +47,20 @@ const documentCards = computed(() => {
     status: 'Pending',
   }))
 })
+
+function requestDocumentUpload(upload) {
+  uploadMessage.value = ''
+  errorMessage.value = ''
+  pendingUpload.value = upload
+}
+
+function closeUploadConfirmation() {
+  if (uploadingType.value) {
+    return
+  }
+
+  pendingUpload.value = null
+}
 
 async function loadDocuments() {
   loading.value = true
@@ -77,12 +100,22 @@ async function uploadDocument({ applicationId, documentType, file }) {
 
     const document = await api.createDocument(formData)
     uploadMessage.value = `${document.documentType} uploaded successfully.`
+    pendingUpload.value = null
     await loadDocuments()
   } catch (error) {
+    pendingUpload.value = null
     errorMessage.value = error.message
   } finally {
     uploadingType.value = ''
   }
+}
+
+function confirmDocumentUpload() {
+  if (!pendingUpload.value) {
+    return
+  }
+
+  uploadDocument(pendingUpload.value)
 }
 
 onMounted(loadDocuments)
@@ -129,8 +162,19 @@ onMounted(loadDocuments)
         :file-name="document.fileName"
         :status="document.status"
         :uploading="uploadingType === document.documentType"
-        @upload="uploadDocument"
+        @upload="requestDocumentUpload"
       />
     </section>
   </DashboardLayout>
+
+  <ConfirmationDialog
+    :show="Boolean(pendingUpload)"
+    title="Upload this document?"
+    :message="uploadConfirmationMessage"
+    confirm-label="Upload document"
+    cancel-label="Cancel"
+    :loading="Boolean(uploadingType)"
+    @confirm="confirmDocumentUpload"
+    @close="closeUploadConfirmation"
+  />
 </template>

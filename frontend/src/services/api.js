@@ -1,5 +1,40 @@
+import { reactive } from 'vue'
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api'
 const SESSION_KEY = 'scholarsync.session'
+const API_LOADING_EVENT = 'scholarsync:api-loading'
+let activeApiRequests = 0
+
+export const apiLoadingState = reactive({
+  active: false,
+  count: 0,
+})
+
+function notifyApiLoading() {
+  apiLoadingState.active = activeApiRequests > 0
+  apiLoadingState.count = activeApiRequests
+
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.dispatchEvent(new CustomEvent(API_LOADING_EVENT, {
+    detail: {
+      active: apiLoadingState.active,
+      count: apiLoadingState.count,
+    },
+  }))
+}
+
+function startApiLoading() {
+  activeApiRequests += 1
+  notifyApiLoading()
+}
+
+function stopApiLoading() {
+  activeApiRequests = Math.max(activeApiRequests - 1, 0)
+  notifyApiLoading()
+}
 
 function buildQuery(params = {}) {
   const query = new URLSearchParams()
@@ -36,6 +71,8 @@ export function clearSession() {
 }
 
 async function request(path, options = {}) {
+  startApiLoading()
+
   const session = getSession()
   const headers = {
     Accept: 'application/json',
@@ -56,18 +93,22 @@ async function request(path, options = {}) {
     config.body = JSON.stringify(options.body)
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, config)
-  const payload = response.status === 204 ? null : await response.json().catch(() => null)
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, config)
+    const payload = response.status === 204 ? null : await response.json().catch(() => null)
 
-  if (!response.ok) {
-    const validationMessage = payload?.errors
-      ? Object.values(payload.errors).flat().join(' ')
-      : null
+    if (!response.ok) {
+      const validationMessage = payload?.errors
+        ? Object.values(payload.errors).flat().join(' ')
+        : null
 
-    throw new Error(validationMessage || payload?.message || 'The backend request failed.')
+      throw new Error(validationMessage || payload?.message || 'The backend request failed.')
+    }
+
+    return payload
+  } finally {
+    stopApiLoading()
   }
-
-  return payload
 }
 
 function data(payload) {

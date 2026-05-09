@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
+import ConfirmationDialog from '../ui/ConfirmationDialog.vue'
 import { api } from '../../services/api'
 
 const props = defineProps({
@@ -31,6 +32,8 @@ const router = useRouter()
 
 const notificationsOpen = ref(false)
 const profileMenuOpen = ref(false)
+const showLogoutConfirmation = ref(false)
+const loggingOut = ref(false)
 
 const notifications = computed(() => props.notificationItems ?? [])
 const initials = computed(() => props.userName.split(' ').map((part) => part[0]).join('').slice(0, 2))
@@ -54,10 +57,29 @@ function closeProfileMenu() {
   profileMenuOpen.value = false
 }
 
-async function logout() {
+function requestLogout() {
   closeProfileMenu()
-  await api.logout()
-  router.push('/login')
+  showLogoutConfirmation.value = true
+}
+
+function closeLogoutConfirmation() {
+  if (loggingOut.value) {
+    return
+  }
+
+  showLogoutConfirmation.value = false
+}
+
+async function logout() {
+  loggingOut.value = true
+
+  try {
+    await api.logout()
+    showLogoutConfirmation.value = false
+    router.push('/login')
+  } finally {
+    loggingOut.value = false
+  }
 }
 
 function handleEscape(event) {
@@ -171,7 +193,7 @@ onBeforeUnmount(() => {
                 <button
                   type="button"
                   class="block w-full rounded-md px-4 py-3 text-left text-sm font-bold text-rose-700 transition hover:bg-rose-50"
-                  @click="logout"
+                  @click="requestLogout"
                 >
                   Logout
                 </button>
@@ -267,4 +289,16 @@ onBeforeUnmount(() => {
       </aside>
     </Transition>
   </Teleport>
+
+  <ConfirmationDialog
+    :show="showLogoutConfirmation"
+    title="Log out of ScholarSync?"
+    message="You will need to sign in again to continue using your workspace."
+    confirm-label="Log out"
+    cancel-label="Stay signed in"
+    tone="danger"
+    :loading="loggingOut"
+    @confirm="logout"
+    @close="closeLogoutConfirmation"
+  />
 </template>

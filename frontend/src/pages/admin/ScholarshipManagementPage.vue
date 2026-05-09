@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import DataTable from '../../components/ui/DataTable.vue'
 import FormInput from '../../components/forms/FormInput.vue'
+import ConfirmationDialog from '../../components/ui/ConfirmationDialog.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
 import { api, getCurrentUser } from '../../services/api'
@@ -12,6 +13,7 @@ const selectedStatus = ref('All')
 const scholarships = ref([])
 const loading = ref(true)
 const saving = ref(false)
+const showSaveConfirmation = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
 const currentUser = getCurrentUser()
@@ -107,6 +109,20 @@ function resetForm() {
   })
 }
 
+function openSaveConfirmation() {
+  errorMessage.value = ''
+  successMessage.value = ''
+  showSaveConfirmation.value = true
+}
+
+function closeSaveConfirmation() {
+  if (saving.value) {
+    return
+  }
+
+  showSaveConfirmation.value = false
+}
+
 async function loadScholarships() {
   loading.value = true
   errorMessage.value = ''
@@ -129,8 +145,10 @@ async function saveScholarship() {
     const scholarship = await api.createScholarship(form)
     scholarships.value = [scholarship, ...scholarships.value]
     successMessage.value = 'Scholarship saved successfully.'
+    showSaveConfirmation.value = false
     resetForm()
   } catch (error) {
+    showSaveConfirmation.value = false
     errorMessage.value = error.message
   } finally {
     saving.value = false
@@ -172,7 +190,7 @@ onMounted(loadScholarships)
         </button>
       </div>
 
-      <form class="mt-6 grid gap-5 lg:grid-cols-2" @submit.prevent="saveScholarship">
+      <form class="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3" @submit.prevent="openSaveConfirmation">
         <FormInput id="scholarship-name" v-model="form.scholarshipName" label="Scholarship Name" placeholder="Academic Excellence Grant" />
         <FormInput id="scholarship-type" v-model="form.scholarshipType" label="Scholarship Type" :options="scholarshipTypeOptions" />
         <FormInput id="academic-year" v-model="form.academicYear" label="Academic Year" placeholder="2026-2027" />
@@ -185,19 +203,13 @@ onMounted(loadScholarships)
         <FormInput id="date-posted" v-model="form.datePosted" label="Date Posted" type="date" />
         <FormInput id="contact-person" v-model="form.contactPerson" label="Contact Person" placeholder="Scholarship Office" />
         <FormInput id="status" v-model="form.status" label="Status" :options="statusOptions" />
-        <div class="lg:col-span-2">
-          <FormInput id="description" v-model="form.description" label="Description" placeholder="Describe the scholarship program." textarea :rows="4" />
+        <div class="grid gap-5 md:col-span-2 md:grid-cols-2 xl:col-span-3">
+          <FormInput id="description" v-model="form.description" label="Description" placeholder="Describe the scholarship program." textarea :rows="3" />
+          <FormInput id="eligibility" v-model="form.eligibilityRequirements" label="Eligibility Requirements" placeholder="Minimum GPA, enrollment status, good moral standing, etc." textarea :rows="3" />
+          <FormInput id="required-documents" v-model="form.requiredDocuments" label="Required Documents" placeholder="Report Card, Valid ID, Certificate of Enrollment, etc." textarea :rows="3" />
+          <FormInput id="announcement-details" v-model="form.announcementDetails" label="Announcement Details" placeholder="Write the announcement details shown to applicants." textarea :rows="3" />
         </div>
-        <div class="lg:col-span-2">
-          <FormInput id="eligibility" v-model="form.eligibilityRequirements" label="Eligibility Requirements" placeholder="Minimum GPA, enrollment status, good moral standing, etc." textarea :rows="4" />
-        </div>
-        <div class="lg:col-span-2">
-          <FormInput id="required-documents" v-model="form.requiredDocuments" label="Required Documents" placeholder="Report Card, Valid ID, Certificate of Enrollment, etc." textarea :rows="4" />
-        </div>
-        <div class="lg:col-span-2">
-          <FormInput id="announcement-details" v-model="form.announcementDetails" label="Announcement Details" placeholder="Write the announcement details shown to applicants." textarea :rows="4" />
-        </div>
-        <div class="lg:col-span-2">
+        <div class="md:col-span-2 xl:col-span-3">
           <button type="submit" class="rounded-md bg-indigo-700 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-slate-300" :disabled="saving">
             {{ saving ? 'Saving...' : 'Save Scholarship' }}
           </button>
@@ -254,4 +266,15 @@ onMounted(loadScholarships)
       </DataTable>
     </section>
   </DashboardLayout>
+
+  <ConfirmationDialog
+    :show="showSaveConfirmation"
+    title="Create this scholarship?"
+    :message="`${form.scholarshipName || 'This scholarship'} will be saved with ${form.status || 'Draft'} status.`"
+    confirm-label="Save scholarship"
+    cancel-label="Cancel"
+    :loading="saving"
+    @confirm="saveScholarship"
+    @close="closeSaveConfirmation"
+  />
 </template>

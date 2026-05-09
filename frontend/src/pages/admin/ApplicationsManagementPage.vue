@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import DataTable from '../../components/ui/DataTable.vue'
+import ConfirmationDialog from '../../components/ui/ConfirmationDialog.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
 import { api, getCurrentUser } from '../../services/api'
@@ -10,6 +11,8 @@ const searchQuery = ref('')
 const selectedStatus = ref('All')
 const applications = ref([])
 const loading = ref(true)
+const updatingStatus = ref(false)
+const pendingStatusChange = ref(null)
 const errorMessage = ref('')
 const currentUser = getCurrentUser()
 
@@ -35,6 +38,49 @@ const filteredApplications = computed(() => {
   })
 })
 
+const statusDialogTitle = computed(() => {
+  const pending = pendingStatusChange.value
+
+  return pending ? `${pending.status} application?` : 'Update application status?'
+})
+
+const statusDialogMessage = computed(() => {
+  const pending = pendingStatusChange.value
+
+  if (!pending) {
+    return ''
+  }
+
+  return `${pending.application.applicantName}'s application will be marked as ${pending.status}.`
+})
+
+const statusDialogTone = computed(() => {
+  const status = pendingStatusChange.value?.status
+
+  if (status === 'Rejected') {
+    return 'danger'
+  }
+
+  if (status === 'For Revision') {
+    return 'warning'
+  }
+
+  return 'primary'
+})
+
+function openStatusConfirmation(application, status) {
+  errorMessage.value = ''
+  pendingStatusChange.value = { application, status }
+}
+
+function closeStatusConfirmation() {
+  if (updatingStatus.value) {
+    return
+  }
+
+  pendingStatusChange.value = null
+}
+
 async function loadApplications() {
   loading.value = true
   errorMessage.value = ''
@@ -50,6 +96,7 @@ async function loadApplications() {
 
 async function setApplicationStatus(application, status) {
   errorMessage.value = ''
+  updatingStatus.value = true
 
   try {
     const updated = await api.updateApplicationStatus(application.id, {
@@ -62,9 +109,21 @@ async function setApplicationStatus(application, status) {
     })
 
     applications.value = applications.value.map((item) => item.id === updated.id ? updated : item)
+    pendingStatusChange.value = null
   } catch (error) {
+    pendingStatusChange.value = null
     errorMessage.value = error.message
+  } finally {
+    updatingStatus.value = false
   }
+}
+
+function confirmStatusChange() {
+  if (!pendingStatusChange.value) {
+    return
+  }
+
+  setApplicationStatus(pendingStatusChange.value.application, pendingStatusChange.value.status)
 }
 
 onMounted(loadApplications)
@@ -125,12 +184,24 @@ onMounted(loadApplications)
             >
               View
             </RouterLink>
-            <button type="button" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700" @click="setApplicationStatus(row, 'Approved')">Approve</button>
-            <button type="button" class="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700" @click="setApplicationStatus(row, 'Rejected')">Reject</button>
-            <button type="button" class="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600" @click="setApplicationStatus(row, 'For Revision')">Request Revision</button>
+            <button type="button" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700" @click="openStatusConfirmation(row, 'Approved')">Approve</button>
+            <button type="button" class="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700" @click="openStatusConfirmation(row, 'Rejected')">Reject</button>
+            <button type="button" class="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600" @click="openStatusConfirmation(row, 'For Revision')">Request Revision</button>
           </div>
         </template>
       </DataTable>
     </section>
   </DashboardLayout>
+
+  <ConfirmationDialog
+    :show="Boolean(pendingStatusChange)"
+    :title="statusDialogTitle"
+    :message="statusDialogMessage"
+    confirm-label="Update status"
+    cancel-label="Cancel"
+    :tone="statusDialogTone"
+    :loading="updatingStatus"
+    @confirm="confirmStatusChange"
+    @close="closeStatusConfirmation"
+  />
 </template>
