@@ -1,15 +1,19 @@
 <script setup>
+import { computed } from 'vue'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import { adminNavigation } from '../../data/navigation'
+import { getCurrentUser } from '../../services/api'
 
-const officerProfile = [
-  ['Full Name', 'Dr. Camille Navarro'],
+const currentUser = getCurrentUser()
+
+const officerProfile = computed(() => [
+  ['Full Name', currentUser?.name || 'Scholarship Officer'],
   ['Role', 'Scholarship Officer'],
-  ['Assigned Program', 'Academic Excellence Grant'],
+  ['Assigned Program', currentUser?.program || 'Scholarship Office'],
   ['Office', 'College Scholarship Office'],
-  ['Email', 'camille.navarro@college.edu'],
-  ['Contact Number', '0917 882 4401'],
-]
+  ['Email', currentUser?.email || 'Not provided'],
+  ['Contact Number', currentUser?.phone || 'Not provided'],
+])
 </script>
 
 <template>
@@ -17,10 +21,10 @@ const officerProfile = [
     sidebar-title="ScholarSync"
     sidebar-subtitle="Officer Portal"
     :sidebar-items="adminNavigation"
-    user-name="Dr. Camille Navarro"
+    :user-name="currentUser?.name || 'Scholarship Officer'"
     context="Officer Profile"
     role-label="Scholarship Officer"
-    :notification-count="8"
+    :notification-count="0"
   >
     <section class="rounded-md border border-slate-200 bg-white p-6 shadow-sm">
       <p class="text-sm font-bold uppercase tracking-[0.18em] text-indigo-700">Profile</p>

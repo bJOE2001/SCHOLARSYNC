@@ -1,14 +1,42 @@
 <script setup>
+import { computed, onMounted, ref } from 'vue'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import StatCard from '../../components/ui/StatCard.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { studentNavigation } from '../../data/navigation'
-import {
-  progressSteps,
-  recentNotifications,
-  studentDashboardStats,
-  studentProfile,
-} from '../../data/sampleData'
+import { api, getCurrentUser } from '../../services/api'
+
+const currentUser = getCurrentUser()
+const loading = ref(true)
+const errorMessage = ref('')
+const dashboard = ref({
+  profile: currentUser ?? { name: 'Student' },
+  stats: [],
+  currentApplication: null,
+  progressSteps: ['Submitted', 'Under Review', 'Approved / Rejected'],
+  recentNotifications: [],
+})
+
+const studentProfile = computed(() => dashboard.value.profile ?? currentUser ?? { name: 'Student' })
+const studentDashboardStats = computed(() => dashboard.value.stats ?? [])
+const progressSteps = computed(() => dashboard.value.progressSteps ?? [])
+const recentNotifications = computed(() => dashboard.value.recentNotifications ?? [])
+const currentApplication = computed(() => dashboard.value.currentApplication)
+
+async function loadDashboard() {
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    dashboard.value = await api.getStudentDashboard(currentUser?.id)
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadDashboard)
 </script>
 
 <template>
@@ -19,8 +47,17 @@ import {
     :user-name="studentProfile.name"
     context="Student Dashboard"
     role-label="Applicant"
-    :notification-count="3"
+    :notification-count="recentNotifications.length"
+    :notification-items="recentNotifications"
   >
+    <section v-if="errorMessage" class="mb-5 rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+      {{ errorMessage }}
+    </section>
+
+    <section v-if="loading" class="rounded-md border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">
+      Loading dashboard...
+    </section>
+
     <section class="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
       <StatCard
         v-for="stat in studentDashboardStats"
@@ -37,9 +74,9 @@ import {
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p class="text-sm font-bold uppercase tracking-[0.18em] text-indigo-700">Application Progress</p>
-            <h2 class="mt-2 text-xl font-bold text-slate-950">City Academic Excellence Grant</h2>
+            <h2 class="mt-2 text-xl font-bold text-slate-950">{{ currentApplication?.program || 'No application submitted' }}</h2>
           </div>
-          <StatusBadge status="Under Review" />
+          <StatusBadge :status="currentApplication?.status || 'Pending'" />
         </div>
 
         <div class="mt-8 grid gap-4 md:grid-cols-3">
@@ -80,6 +117,9 @@ import {
             <p class="mt-2 text-sm leading-6 text-slate-600">{{ notification.message }}</p>
             <p class="mt-3 text-xs font-semibold text-slate-400">{{ notification.time }}</p>
           </div>
+          <p v-if="!recentNotifications.length" class="rounded-md bg-slate-50 p-4 text-sm font-semibold text-slate-500">
+            No recent notifications.
+          </p>
         </div>
       </article>
     </section>

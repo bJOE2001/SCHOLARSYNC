@@ -1,7 +1,7 @@
 <script setup>
 import { RouterLink } from 'vue-router'
 import heroImage from '../assets/hero.png'
-import { featureCards } from '../data/sampleData'
+import { featureCards } from '../data/features'
 </script>
 
 <template>

@@ -1,11 +1,11 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import DataTable from '../../components/ui/DataTable.vue'
 import StatCard from '../../components/ui/StatCard.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
-import { complianceRecords } from '../../data/sampleData'
+import { api, getCurrentUser } from '../../services/api'
 
 const columns = [
   { key: 'scholarName', label: 'Scholar Name' },
@@ -18,6 +18,10 @@ const columns = [
 const searchQuery = ref('')
 const selectedStatus = ref('All')
 const selectedRisk = ref('All')
+const complianceRecords = ref([])
+const loading = ref(true)
+const errorMessage = ref('')
+const currentUser = getCurrentUser()
 
 const statusOptions = ['All', 'Compliant', 'Needs Monitoring', 'At Risk']
 const riskOptions = ['All', 'Low', 'Medium', 'High']
@@ -25,7 +29,7 @@ const riskOptions = ['All', 'Low', 'Medium', 'High']
 const filteredComplianceRecords = computed(() => {
   const query = searchQuery.value.toLowerCase().trim()
 
-  return complianceRecords.filter((record) => {
+  return complianceRecords.value.filter((record) => {
     const matchesSearch = record.scholarName.toLowerCase().includes(query)
     const matchesStatus = selectedStatus.value === 'All' || record.complianceStatus === selectedStatus.value
     const matchesRisk = selectedRisk.value === 'All' || record.riskLevel === selectedRisk.value
@@ -34,11 +38,41 @@ const filteredComplianceRecords = computed(() => {
   })
 })
 
-const summaryCards = [
-  { title: 'Compliant Scholars', value: '594', subtitle: 'Good academic standing', tone: 'green' },
-  { title: 'Needs Monitoring', value: '43', subtitle: 'Watchlist this month', tone: 'amber' },
-  { title: 'High Risk', value: '18', subtitle: 'Requires intervention', tone: 'red' },
-]
+const summaryCards = computed(() => [
+  {
+    title: 'Compliant Scholars',
+    value: String(complianceRecords.value.filter((record) => record.complianceStatus === 'Compliant').length),
+    subtitle: 'Good academic standing',
+    tone: 'green',
+  },
+  {
+    title: 'Needs Monitoring',
+    value: String(complianceRecords.value.filter((record) => record.complianceStatus === 'Needs Monitoring').length),
+    subtitle: 'Watchlist this month',
+    tone: 'amber',
+  },
+  {
+    title: 'High Risk',
+    value: String(complianceRecords.value.filter((record) => record.riskLevel === 'High').length),
+    subtitle: 'Requires intervention',
+    tone: 'red',
+  },
+])
+
+async function loadComplianceRecords() {
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    complianceRecords.value = await api.listComplianceRecords()
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadComplianceRecords)
 </script>
 
 <template>
@@ -46,11 +80,15 @@ const summaryCards = [
     sidebar-title="ScholarSync"
     sidebar-subtitle="Officer Portal"
     :sidebar-items="adminNavigation"
-    user-name="Dr. Camille Navarro"
+    :user-name="currentUser?.name || 'Scholarship Officer'"
     context="Compliance Monitoring"
     role-label="Scholarship Officer"
-    :notification-count="8"
+    :notification-count="0"
   >
+    <section v-if="errorMessage" class="mb-5 rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+      {{ errorMessage }}
+    </section>
+
     <section class="grid gap-5 md:grid-cols-3">
       <StatCard
         v-for="card in summaryCards"
@@ -97,7 +135,12 @@ const summaryCards = [
     </section>
 
     <section class="mt-6">
+      <p v-if="loading" class="rounded-md border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">
+        Loading compliance records...
+      </p>
+
       <DataTable
+        v-else
         :columns="columns"
         :rows="filteredComplianceRecords"
         :initial-per-page="2"

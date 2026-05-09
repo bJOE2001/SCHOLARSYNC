@@ -1,9 +1,15 @@
 <script setup>
+import { onMounted, ref } from 'vue'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import DataTable from '../../components/ui/DataTable.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
-import { submittedDocuments } from '../../data/sampleData'
+import { api, getCurrentUser } from '../../services/api'
+
+const submittedDocuments = ref([])
+const loading = ref(true)
+const errorMessage = ref('')
+const currentUser = getCurrentUser()
 
 const columns = [
   { key: 'studentName', label: 'Student Name' },
@@ -13,6 +19,38 @@ const columns = [
   { key: 'verificationStatus', label: 'Verification Status' },
   { key: 'actions', label: 'Actions' },
 ]
+
+async function loadDocuments() {
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    submittedDocuments.value = await api.listDocuments()
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function setDocumentStatus(document, verificationStatus) {
+  errorMessage.value = ''
+
+  try {
+    const updated = await api.updateDocumentStatus(document.id, {
+      verificationStatus,
+      remarks: verificationStatus === 'Verified'
+        ? 'Document is readable and matches applicant details.'
+        : 'Please upload a clearer copy for verification.',
+    })
+
+    submittedDocuments.value = submittedDocuments.value.map((item) => item.id === updated.id ? updated : item)
+  } catch (error) {
+    errorMessage.value = error.message
+  }
+}
+
+onMounted(loadDocuments)
 </script>
 
 <template>
@@ -20,11 +58,15 @@ const columns = [
     sidebar-title="ScholarSync"
     sidebar-subtitle="Officer Portal"
     :sidebar-items="adminNavigation"
-    user-name="Dr. Camille Navarro"
+    :user-name="currentUser?.name || 'Scholarship Officer'"
     context="Document Review"
     role-label="Scholarship Officer"
-    :notification-count="8"
+    :notification-count="0"
   >
+    <section v-if="errorMessage" class="mb-5 rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+      {{ errorMessage }}
+    </section>
+
     <section class="mb-6 rounded-md border border-slate-200 bg-white p-6 shadow-sm">
       <p class="text-sm font-bold uppercase tracking-[0.18em] text-indigo-700">Submitted Documents</p>
       <h2 class="mt-2 text-xl font-bold text-slate-950">Review and verify uploaded files</h2>
@@ -33,7 +75,11 @@ const columns = [
       </p>
     </section>
 
-    <DataTable :columns="columns" :rows="submittedDocuments">
+    <p v-if="loading" class="rounded-md border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">
+      Loading documents...
+    </p>
+
+    <DataTable v-else :columns="columns" :rows="submittedDocuments">
       <template #cell-verificationStatus="{ value }">
         <StatusBadge :status="String(value)" />
       </template>
@@ -45,8 +91,8 @@ const columns = [
           >
             View
           </RouterLink>
-          <button type="button" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700">Verify</button>
-          <button type="button" class="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600">Request Revision</button>
+          <button type="button" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700" @click="setDocumentStatus(row, 'Verified')">Verify</button>
+          <button type="button" class="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600" @click="setDocumentStatus(row, 'For Revision')">Request Revision</button>
         </div>
       </template>
     </DataTable>

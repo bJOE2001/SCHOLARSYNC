@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
+import { api } from '../../services/api'
 
 const props = defineProps({
   userName: {
@@ -26,29 +27,12 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['toggleSidebar'])
+const router = useRouter()
 
 const notificationsOpen = ref(false)
 const profileMenuOpen = ref(false)
 
-const defaultNotifications = [
-  {
-    title: 'Document review in progress',
-    message: 'A submitted requirement is currently being checked by the scholarship office.',
-    time: '10 minutes ago',
-  },
-  {
-    title: 'Application update',
-    message: 'There is a new status update available in your ScholarSync workspace.',
-    time: 'Today',
-  },
-  {
-    title: 'Announcement posted',
-    message: 'A new scholarship announcement has been published.',
-    time: '2 days ago',
-  },
-]
-
-const notifications = computed(() => props.notificationItems?.length ? props.notificationItems : defaultNotifications)
+const notifications = computed(() => props.notificationItems ?? [])
 const initials = computed(() => props.userName.split(' ').map((part) => part[0]).join('').slice(0, 2))
 const profilePath = computed(() => props.roleLabel.toLowerCase().includes('applicant') ? '/student/profile' : '/admin/profile')
 
@@ -68,6 +52,12 @@ function toggleProfileMenu() {
 
 function closeProfileMenu() {
   profileMenuOpen.value = false
+}
+
+async function logout() {
+  closeProfileMenu()
+  await api.logout()
+  router.push('/login')
 }
 
 function handleEscape(event) {
@@ -178,13 +168,13 @@ onBeforeUnmount(() => {
                 >
                   Profile
                 </RouterLink>
-                <RouterLink
-                  to="/login"
-                  class="block rounded-md px-4 py-3 text-sm font-bold text-rose-700 transition hover:bg-rose-50"
-                  @click="closeProfileMenu"
+                <button
+                  type="button"
+                  class="block w-full rounded-md px-4 py-3 text-left text-sm font-bold text-rose-700 transition hover:bg-rose-50"
+                  @click="logout"
                 >
                   Logout
-                </RouterLink>
+                </button>
               </div>
             </div>
           </Transition>
@@ -259,6 +249,9 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
+            <p v-if="notifications.length === 0" class="px-4 py-6 text-sm font-semibold text-slate-500">
+              No notifications yet.
+            </p>
           </div>
         </div>
 

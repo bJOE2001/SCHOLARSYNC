@@ -2,11 +2,14 @@
 import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import FormInput from '../components/forms/FormInput.vue'
+import { api } from '../services/api'
 
 const router = useRouter()
 const email = ref('')
 const password = ref('')
 const role = ref('student')
+const isSubmitting = ref(false)
+const errorMessage = ref('')
 
 const roleOptions = [
   { label: 'Student', value: 'student' },
@@ -15,8 +18,23 @@ const roleOptions = [
 
 const dashboardPath = computed(() => (role.value === 'administrator' ? '/admin/dashboard' : '/student/dashboard'))
 
-function submitLogin() {
-  router.push(dashboardPath.value)
+async function submitLogin() {
+  errorMessage.value = ''
+  isSubmitting.value = true
+
+  try {
+    await api.login({
+      email: email.value,
+      password: password.value,
+      role: role.value,
+    })
+
+    router.push(dashboardPath.value)
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    isSubmitting.value = false
+  }
 }
 </script>
 
@@ -52,11 +70,16 @@ function submitLogin() {
           :options="roleOptions"
         />
 
+        <p v-if="errorMessage" class="rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+          {{ errorMessage }}
+        </p>
+
         <button
           type="submit"
           class="w-full rounded-md bg-indigo-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-800"
+          :disabled="isSubmitting"
         >
-          Login
+          {{ isSubmitting ? 'Logging in...' : 'Login' }}
         </button>
       </form>
 

@@ -6,7 +6,7 @@ import DataTable from '../../components/ui/DataTable.vue'
 import StatCard from '../../components/ui/StatCard.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
-import { analyticsCards, predictedAtRiskScholars } from '../../data/sampleData'
+import { api, getCurrentUser } from '../../services/api'
 
 const columns = [
   { key: 'name', label: 'Name' },
@@ -21,6 +21,13 @@ const selectedForecastIndex = ref(5)
 const selectedRiskLevel = ref('Medium')
 const forecastChartElement = ref(null)
 const riskChartElement = ref(null)
+const analyticsCards = ref([])
+const predictedAtRiskScholars = ref([])
+const applicantForecast = ref([])
+const riskOverview = ref([])
+const loading = ref(true)
+const errorMessage = ref('')
+const currentUser = getCurrentUser()
 let forecastChart = null
 let riskChart = null
 
@@ -30,59 +37,33 @@ const metricOptions = [
   { label: 'Probability', value: 'probability' },
 ]
 
-const applicantForecast = [
-  { month: 'Jun', applicants: 980, approvals: 516, probability: 53 },
-  { month: 'Jul', applicants: 1120, approvals: 638, probability: 57 },
-  { month: 'Aug', applicants: 1080, approvals: 626, probability: 58 },
-  { month: 'Sep', applicants: 1310, approvals: 786, probability: 60 },
-  { month: 'Oct', applicants: 1240, approvals: 719, probability: 58 },
-  { month: 'Nov', applicants: 1520, approvals: 897, probability: 59 },
-]
-
-const riskOverview = [
-  {
-    level: 'Low',
-    count: 128,
-    percent: 51,
-    color: '#2563eb',
-    description: 'Scholars with stable grades and complete compliance records.',
-  },
-  {
-    level: 'Medium',
-    count: 74,
-    percent: 30,
-    color: '#4f46e5',
-    description: 'Scholars needing monitoring due to partial compliance or grade movement.',
-  },
-  {
-    level: 'High',
-    count: 47,
-    percent: 19,
-    color: '#e11d48',
-    description: 'Scholars recommended for intervention and close follow-up.',
-  },
-]
-
-const selectedForecast = computed(() => applicantForecast[selectedForecastIndex.value])
+const selectedForecast = computed(() => {
+  return applicantForecast.value[selectedForecastIndex.value] ?? {
+    month: 'N/A',
+    applicants: 0,
+    approvals: 0,
+    probability: 0,
+  }
+})
 
 const metricLabel = computed(() => {
   return metricOptions.find((metric) => metric.value === selectedMetric.value)?.label ?? 'Applicants'
 })
 
 const maxForecastValue = computed(() => {
-  return Math.max(...applicantForecast.map((item) => item[selectedMetric.value]))
+  return Math.max(...applicantForecast.value.map((item) => item[selectedMetric.value]), 0)
 })
 
 const selectedRisk = computed(() => {
-  return riskOverview.find((risk) => risk.level === selectedRiskLevel.value) ?? riskOverview[0]
+  return riskOverview.value.find((risk) => risk.level === selectedRiskLevel.value) ?? riskOverview.value[0]
 })
 
 const selectedRiskIndex = computed(() => {
-  return riskOverview.findIndex((risk) => risk.level === selectedRiskLevel.value)
+  return riskOverview.value.findIndex((risk) => risk.level === selectedRiskLevel.value)
 })
 
 function metricValues() {
-  return applicantForecast.map((item) => item[selectedMetric.value])
+  return applicantForecast.value.map((item) => item[selectedMetric.value])
 }
 
 function metricValueFormatter(value) {
@@ -94,7 +75,7 @@ function metricValueFormatter(value) {
 }
 
 function forecastColors() {
-  return applicantForecast.map((_, index) => (index === selectedForecastIndex.value ? '#4338ca' : '#93c5fd'))
+  return applicantForecast.value.map((_, index) => (index === selectedForecastIndex.value ? '#4338ca' : '#93c5fd'))
 }
 
 function forecastChartOptions() {
@@ -132,7 +113,7 @@ function forecastChartOptions() {
       padding: { left: 8, right: 8 },
     },
     xaxis: {
-      categories: applicantForecast.map((item) => item.month),
+      categories: applicantForecast.value.map((item) => item.month),
       labels: {
         style: {
           colors: '#64748b',
@@ -175,13 +156,13 @@ function riskChartOptions() {
       toolbar: { show: false },
       events: {
         dataPointSelection(_, __, config) {
-          selectedRiskLevel.value = riskOverview[config.dataPointIndex]?.level ?? selectedRiskLevel.value
+          selectedRiskLevel.value = riskOverview.value[config.dataPointIndex]?.level ?? selectedRiskLevel.value
         },
       },
     },
-    series: riskOverview.map((risk) => risk.count),
-    labels: riskOverview.map((risk) => `${risk.level} Risk`),
-    colors: riskOverview.map((risk) => risk.color),
+    series: riskOverview.value.map((risk) => risk.count),
+    labels: riskOverview.value.map((risk) => `${risk.level} Risk`),
+    colors: riskOverview.value.map((risk) => risk.color),
     stroke: {
       colors: ['#ffffff'],
       width: 4,
@@ -226,7 +207,7 @@ function riskChartOptions() {
               color: '#64748b',
               fontSize: '12px',
               formatter() {
-                return riskOverview.reduce((sum, risk) => sum + risk.count, 0)
+                return riskOverview.value.reduce((sum, risk) => sum + risk.count, 0)
               },
             },
           },
@@ -240,6 +221,51 @@ function riskChartOptions() {
         },
       },
     },
+  }
+}
+
+function riskDescriptions(items) {
+  const total = items.reduce((sum, risk) => sum + risk.count, 0) || 1
+
+  return items.map((risk) => ({
+    ...risk,
+    percent: Math.round((risk.count / total) * 100),
+    description: risk.level === 'Low'
+      ? 'Scholars with stable grades and complete compliance records.'
+      : risk.level === 'Medium'
+        ? 'Scholars needing monitoring due to partial compliance or grade movement.'
+        : 'Scholars recommended for intervention and close follow-up.',
+  }))
+}
+
+async function loadAnalytics() {
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    const response = await api.getAnalytics()
+    analyticsCards.value = response.cards ?? []
+    applicantForecast.value = response.applicantForecast ?? []
+    riskOverview.value = riskDescriptions(response.riskOverview ?? [])
+    predictedAtRiskScholars.value = response.predictedAtRiskScholars?.data ?? response.predictedAtRiskScholars ?? []
+    selectedForecastIndex.value = Math.max(applicantForecast.value.length - 1, 0)
+
+    forecastChart?.destroy()
+    riskChart?.destroy()
+
+    if (forecastChartElement.value) {
+      forecastChart = new ApexCharts(forecastChartElement.value, forecastChartOptions())
+      forecastChart.render()
+    }
+
+    if (riskChartElement.value) {
+      riskChart = new ApexCharts(riskChartElement.value, riskChartOptions())
+      riskChart.render()
+    }
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    loading.value = false
   }
 }
 
@@ -270,17 +296,7 @@ function updateForecastChart() {
   })
 }
 
-onMounted(() => {
-  if (forecastChartElement.value) {
-    forecastChart = new ApexCharts(forecastChartElement.value, forecastChartOptions())
-    forecastChart.render()
-  }
-
-  if (riskChartElement.value) {
-    riskChart = new ApexCharts(riskChartElement.value, riskChartOptions())
-    riskChart.render()
-  }
-})
+onMounted(loadAnalytics)
 
 watch([selectedMetric, selectedForecastIndex], updateForecastChart)
 
@@ -295,11 +311,19 @@ onBeforeUnmount(() => {
     sidebar-title="ScholarSync"
     sidebar-subtitle="Officer Portal"
     :sidebar-items="adminNavigation"
-    user-name="Dr. Camille Navarro"
+    :user-name="currentUser?.name || 'Scholarship Officer'"
     context="Predictive Analytics"
     role-label="Scholarship Officer"
-    :notification-count="8"
+    :notification-count="0"
   >
+    <section v-if="errorMessage" class="mb-5 rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+      {{ errorMessage }}
+    </section>
+
+    <section v-if="loading" class="mb-5 rounded-md border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">
+      Loading analytics...
+    </section>
+
     <section class="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
       <StatCard
         v-for="card in analyticsCards"

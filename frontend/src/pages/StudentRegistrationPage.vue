@@ -1,7 +1,12 @@
 <script setup>
-import { reactive } from 'vue'
-import { RouterLink } from 'vue-router'
+import { reactive, ref } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 import FormInput from '../components/forms/FormInput.vue'
+import { api } from '../services/api'
+
+const router = useRouter()
+const isSubmitting = ref(false)
+const errorMessage = ref('')
 
 const form = reactive({
   firstName: '',
@@ -27,6 +32,20 @@ const yearLevelOptions = [
   { label: '3rd Year', value: '3rd Year' },
   { label: '4th Year', value: '4th Year' },
 ]
+
+async function submitRegistration() {
+  errorMessage.value = ''
+  isSubmitting.value = true
+
+  try {
+    await api.register(form)
+    router.push('/student/dashboard')
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    isSubmitting.value = false
+  }
+}
 </script>
 
 <template>
@@ -43,7 +62,7 @@ const yearLevelOptions = [
         </RouterLink>
       </div>
 
-      <form class="mt-8 grid gap-5 md:grid-cols-2">
+      <form class="mt-8 grid gap-5 md:grid-cols-2" @submit.prevent="submitRegistration">
         <FormInput id="first-name" v-model="form.firstName" label="First Name" placeholder="Alyssa" />
         <FormInput id="last-name" v-model="form.lastName" label="Last Name" placeholder="Mendoza" />
         <FormInput id="email" v-model="form.email" label="Email" type="email" placeholder="alyssa@college.edu" />
@@ -53,12 +72,17 @@ const yearLevelOptions = [
         <FormInput id="password" v-model="form.password" label="Password" type="password" placeholder="Create a password" />
         <FormInput id="confirm-password" v-model="form.confirmPassword" label="Confirm Password" type="password" placeholder="Confirm your password" />
 
+        <p v-if="errorMessage" class="rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 md:col-span-2">
+          {{ errorMessage }}
+        </p>
+
         <div class="md:col-span-2">
           <button
-            type="button"
-            class="w-full rounded-md bg-indigo-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-800 sm:w-auto"
+            type="submit"
+            class="w-full rounded-md bg-indigo-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
+            :disabled="isSubmitting"
           >
-            Submit Registration
+            {{ isSubmitting ? 'Submitting...' : 'Submit Registration' }}
           </button>
         </div>
       </form>

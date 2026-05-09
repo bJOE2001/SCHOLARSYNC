@@ -1,9 +1,20 @@
 <script setup>
-import { computed, reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import FormInput from '../../components/forms/FormInput.vue'
 import { studentNavigation } from '../../data/navigation'
-import { studentProfile } from '../../data/sampleData'
+import { api, getCurrentUser } from '../../services/api'
+
+const router = useRouter()
+const currentUser = getCurrentUser()
+const loading = ref(true)
+const submitting = ref(false)
+const errorMessage = ref('')
+const successMessage = ref('')
+const studentProfile = ref(currentUser ?? { name: 'Student' })
+const scholarships = ref([])
+const recentNotifications = ref([])
 
 const application = reactive({
   scholarshipProgram: '',
@@ -14,12 +25,12 @@ const application = reactive({
   reason: '',
 })
 
-const scholarshipOptions = [
-  { label: 'City Academic Excellence Grant', value: 'City Academic Excellence Grant' },
-  { label: 'Financial Assistance Program', value: 'Financial Assistance Program' },
-  { label: 'STEM Scholarship', value: 'STEM Scholarship' },
-  { label: 'Leadership Grant', value: 'Leadership Grant' },
-]
+const scholarshipOptions = computed(() => scholarships.value
+  .filter((scholarship) => scholarship.status === 'Open')
+  .map((scholarship) => ({
+    label: scholarship.scholarshipName,
+    value: scholarship.scholarshipName,
+  })))
 
 const yearLevelOptions = [
   { label: '1st Year', value: '1st Year' },
@@ -100,6 +111,57 @@ function completionIconClass(isComplete, isLocked = false) {
 
   return 'bg-indigo-700 text-white'
 }
+
+async function loadFormData() {
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    const [profile, scholarshipList, dashboard] = await Promise.all([
+      api.getStudentProfile(currentUser?.id),
+      api.listScholarships(),
+      api.getStudentDashboard(currentUser?.id).catch(() => null),
+    ])
+
+    studentProfile.value = profile
+    scholarships.value = scholarshipList
+    recentNotifications.value = dashboard?.recentNotifications ?? []
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function submitApplication() {
+  if (isSubmitDisabled.value) {
+    return
+  }
+
+  submitting.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
+
+  try {
+    await api.createApplication({
+      userId: currentUser?.id,
+      scholarshipProgram: application.scholarshipProgram,
+      gpa: application.gpa,
+      yearLevel: application.yearLevel,
+      address: application.address,
+      reason: application.reason,
+    })
+
+    successMessage.value = 'Application submitted successfully.'
+    router.push('/student/status')
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    submitting.value = false
+  }
+}
+
+onMounted(loadFormData)
 </script>
 
 <template>
@@ -110,9 +172,18 @@ function completionIconClass(isComplete, isLocked = false) {
     :user-name="studentProfile.name"
     context="Scholarship Application"
     role-label="Applicant"
-    :notification-count="3"
+    :notification-count="recentNotifications.length"
+    :notification-items="recentNotifications"
   >
-    <form class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+    <section v-if="errorMessage" class="mb-5 rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+      {{ errorMessage }}
+    </section>
+
+    <section v-if="successMessage" class="mb-5 rounded-md bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+      {{ successMessage }}
+    </section>
+
+    <form class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm" @submit.prevent="submitApplication">
       <div class="border-b border-slate-200 p-5 sm:p-6">
         <p class="text-sm font-bold uppercase tracking-[0.18em] text-indigo-700">Scholarship Application</p>
         <div class="mt-2 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -128,7 +199,11 @@ function completionIconClass(isComplete, isLocked = false) {
         </div>
       </div>
 
-      <div>
+      <div v-if="loading" class="p-6 text-sm font-semibold text-slate-500">
+        Loading application form...
+      </div>
+
+      <div v-else>
         <section class="space-y-6 p-5 sm:p-6 lg:p-8">
           <section class="rounded-md border border-slate-200 p-5">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -411,11 +486,11 @@ function completionIconClass(isComplete, isLocked = false) {
           {{ isSubmitDisabled ? 'Complete all required sections to submit your application.' : 'All sections are complete. You can submit your application.' }}
         </p>
         <button
-          type="button"
+          type="submit"
           class="rounded-md bg-indigo-700 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
-          :disabled="isSubmitDisabled"
+          :disabled="isSubmitDisabled || submitting"
         >
-          Submit Application
+          {{ submitting ? 'Submitting...' : 'Submit Application' }}
         </button>
       </div>
     </form>

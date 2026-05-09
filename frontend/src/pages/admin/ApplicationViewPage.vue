@@ -1,26 +1,20 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import DataTable from '../../components/ui/DataTable.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
-import { applications, submittedDocuments } from '../../data/sampleData'
+import { api, getCurrentUser } from '../../services/api'
 
 const route = useRoute()
-
-const application = computed(() => {
-  const id = String(route.params.id)
-
-  return applications.find((item) => item.id === id)
-})
+const currentUser = getCurrentUser()
+const application = ref(null)
+const loading = ref(true)
+const errorMessage = ref('')
 
 const relatedDocuments = computed(() => {
-  if (!application.value) {
-    return []
-  }
-
-  return submittedDocuments.filter((document) => document.studentName === application.value?.applicantName)
+  return application.value?.documents ?? []
 })
 
 const documentColumns = [
@@ -29,6 +23,42 @@ const documentColumns = [
   { key: 'uploadDate', label: 'Upload Date' },
   { key: 'verificationStatus', label: 'Status' },
 ]
+
+async function loadApplication() {
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    application.value = await api.getApplication(String(route.params.id))
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function setStatus(status) {
+  if (!application.value) {
+    return
+  }
+
+  errorMessage.value = ''
+
+  try {
+    application.value = await api.updateApplicationStatus(application.value.id, {
+      status,
+      remarks: status === 'Approved'
+        ? 'Approved for the current scholarship cycle.'
+        : status === 'Rejected'
+          ? 'Application was rejected after review.'
+          : 'Please revise the flagged requirements.',
+    })
+  } catch (error) {
+    errorMessage.value = error.message
+  }
+}
+
+onMounted(loadApplication)
 </script>
 
 <template>
@@ -36,11 +66,19 @@ const documentColumns = [
     sidebar-title="ScholarSync"
     sidebar-subtitle="Officer Portal"
     :sidebar-items="adminNavigation"
-    user-name="Dr. Camille Navarro"
+    :user-name="currentUser?.name || 'Scholarship Officer'"
     context="Application Details"
     role-label="Scholarship Officer"
-    :notification-count="8"
+    :notification-count="0"
   >
+    <section v-if="errorMessage" class="mb-5 rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+      {{ errorMessage }}
+    </section>
+
+    <section v-if="loading" class="rounded-md border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">
+      Loading application...
+    </section>
+
     <section v-if="application" class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
       <header class="flex flex-col gap-4 p-6 lg:flex-row lg:items-start lg:justify-between">
         <div>
@@ -52,9 +90,9 @@ const documentColumns = [
         </div>
         <div class="flex flex-wrap gap-2">
           <StatusBadge :status="application.status" />
-          <button type="button" class="rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">Approve</button>
-          <button type="button" class="rounded-md bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700">Reject</button>
-          <button type="button" class="rounded-md bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600">Request Revision</button>
+          <button type="button" class="rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700" @click="setStatus('Approved')">Approve</button>
+          <button type="button" class="rounded-md bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700" @click="setStatus('Rejected')">Reject</button>
+          <button type="button" class="rounded-md bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600" @click="setStatus('For Revision')">Request Revision</button>
         </div>
       </header>
 
@@ -144,7 +182,7 @@ const documentColumns = [
       </section>
     </section>
 
-    <section v-else class="rounded-md border border-slate-200 bg-white p-6 text-center shadow-sm">
+    <section v-else-if="!loading" class="rounded-md border border-slate-200 bg-white p-6 text-center shadow-sm">
       <h2 class="text-xl font-bold text-slate-950">Application not found</h2>
       <p class="mt-2 text-sm text-slate-500">The selected application could not be found.</p>
       <RouterLink to="/admin/applications" class="mt-5 inline-flex rounded-md bg-indigo-700 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-800">

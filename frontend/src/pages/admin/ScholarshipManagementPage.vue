@@ -1,14 +1,20 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import DataTable from '../../components/ui/DataTable.vue'
 import FormInput from '../../components/forms/FormInput.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
-import { scholarships } from '../../data/sampleData'
+import { api, getCurrentUser } from '../../services/api'
 
 const searchQuery = ref('')
 const selectedStatus = ref('All')
+const scholarships = ref([])
+const loading = ref(true)
+const saving = ref(false)
+const errorMessage = ref('')
+const successMessage = ref('')
+const currentUser = getCurrentUser()
 
 const form = reactive({
   scholarshipName: '',
@@ -70,7 +76,7 @@ const columns = [
 const filteredScholarships = computed(() => {
   const query = searchQuery.value.toLowerCase().trim()
 
-  return scholarships.filter((scholarship) => {
+  return scholarships.value.filter((scholarship) => {
     const matchesSearch =
       scholarship.scholarshipName.toLowerCase().includes(query) ||
       scholarship.scholarshipType.toLowerCase().includes(query)
@@ -100,6 +106,38 @@ function resetForm() {
     datePosted: '',
   })
 }
+
+async function loadScholarships() {
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    scholarships.value = await api.listScholarships()
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function saveScholarship() {
+  saving.value = true
+  errorMessage.value = ''
+  successMessage.value = ''
+
+  try {
+    const scholarship = await api.createScholarship(form)
+    scholarships.value = [scholarship, ...scholarships.value]
+    successMessage.value = 'Scholarship saved successfully.'
+    resetForm()
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    saving.value = false
+  }
+}
+
+onMounted(loadScholarships)
 </script>
 
 <template>
@@ -107,11 +145,19 @@ function resetForm() {
     sidebar-title="ScholarSync"
     sidebar-subtitle="Officer Portal"
     :sidebar-items="adminNavigation"
-    user-name="Dr. Camille Navarro"
+    :user-name="currentUser?.name || 'Scholarship Officer'"
     context="Scholarship Management"
     role-label="Scholarship Officer"
-    :notification-count="8"
+    :notification-count="0"
   >
+    <section v-if="errorMessage" class="mb-5 rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+      {{ errorMessage }}
+    </section>
+
+    <section v-if="successMessage" class="mb-5 rounded-md bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+      {{ successMessage }}
+    </section>
+
     <section class="rounded-md border border-slate-200 bg-white p-6 shadow-sm">
       <div class="flex flex-col gap-3 border-b border-slate-200 pb-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
@@ -126,7 +172,7 @@ function resetForm() {
         </button>
       </div>
 
-      <form class="mt-6 grid gap-5 lg:grid-cols-2">
+      <form class="mt-6 grid gap-5 lg:grid-cols-2" @submit.prevent="saveScholarship">
         <FormInput id="scholarship-name" v-model="form.scholarshipName" label="Scholarship Name" placeholder="Academic Excellence Grant" />
         <FormInput id="scholarship-type" v-model="form.scholarshipType" label="Scholarship Type" :options="scholarshipTypeOptions" />
         <FormInput id="academic-year" v-model="form.academicYear" label="Academic Year" placeholder="2026-2027" />
@@ -152,8 +198,8 @@ function resetForm() {
           <FormInput id="announcement-details" v-model="form.announcementDetails" label="Announcement Details" placeholder="Write the announcement details shown to applicants." textarea :rows="4" />
         </div>
         <div class="lg:col-span-2">
-          <button type="button" class="rounded-md bg-indigo-700 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-800">
-            Save Scholarship
+          <button type="submit" class="rounded-md bg-indigo-700 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-800 disabled:cursor-not-allowed disabled:bg-slate-300" :disabled="saving">
+            {{ saving ? 'Saving...' : 'Save Scholarship' }}
           </button>
         </div>
       </form>
@@ -183,7 +229,12 @@ function resetForm() {
     </section>
 
     <section class="mt-6">
+      <p v-if="loading" class="rounded-md border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">
+        Loading scholarships...
+      </p>
+
       <DataTable
+        v-else
         :columns="columns"
         :rows="filteredScholarships"
         :initial-per-page="5"

@@ -1,26 +1,54 @@
 <script setup>
-import { computed } from 'vue'
+import { onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
-import { applications, submittedDocuments } from '../../data/sampleData'
+import { api, getCurrentUser } from '../../services/api'
 
 const route = useRoute()
+const currentUser = getCurrentUser()
+const document = ref(null)
+const applicant = ref(null)
+const loading = ref(true)
+const errorMessage = ref('')
 
-const document = computed(() => {
-  const id = String(route.params.id)
+async function loadDocument() {
+  loading.value = true
+  errorMessage.value = ''
 
-  return submittedDocuments.find((item) => item.id === id)
-})
+  try {
+    document.value = await api.getDocument(String(route.params.id))
+    applicant.value = document.value.applicationId
+      ? await api.getApplication(document.value.applicationId)
+      : null
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
 
-const applicant = computed(() => {
+async function setDocumentStatus(verificationStatus) {
   if (!document.value) {
-    return undefined
+    return
   }
 
-  return applications.find((item) => item.applicantName === document.value.studentName)
-})
+  errorMessage.value = ''
+
+  try {
+    document.value = await api.updateDocumentStatus(document.value.id, {
+      verificationStatus,
+      remarks: verificationStatus === 'Verified'
+        ? 'Document is readable and matches applicant details.'
+        : 'Please upload a clearer copy for verification.',
+    })
+  } catch (error) {
+    errorMessage.value = error.message
+  }
+}
+
+onMounted(loadDocument)
 </script>
 
 <template>
@@ -28,11 +56,19 @@ const applicant = computed(() => {
     sidebar-title="ScholarSync"
     sidebar-subtitle="Officer Portal"
     :sidebar-items="adminNavigation"
-    user-name="Dr. Camille Navarro"
+    :user-name="currentUser?.name || 'Scholarship Officer'"
     context="Document Details"
     role-label="Scholarship Officer"
-    :notification-count="8"
+    :notification-count="0"
   >
+    <section v-if="errorMessage" class="mb-5 rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+      {{ errorMessage }}
+    </section>
+
+    <section v-if="loading" class="rounded-md border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">
+      Loading document...
+    </section>
+
     <section v-if="document" class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
       <header class="flex flex-col gap-4 p-6 lg:flex-row lg:items-start lg:justify-between">
         <div>
@@ -44,8 +80,8 @@ const applicant = computed(() => {
         </div>
         <div class="flex flex-wrap gap-2">
           <StatusBadge :status="document.verificationStatus" />
-          <button type="button" class="rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700">Verify</button>
-          <button type="button" class="rounded-md bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600">Request Revision</button>
+          <button type="button" class="rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700" @click="setDocumentStatus('Verified')">Verify</button>
+          <button type="button" class="rounded-md bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600" @click="setDocumentStatus('For Revision')">Request Revision</button>
         </div>
       </header>
 
@@ -137,7 +173,7 @@ const applicant = computed(() => {
       </section>
     </section>
 
-    <section v-else class="rounded-md border border-slate-200 bg-white p-6 text-center shadow-sm">
+    <section v-else-if="!loading" class="rounded-md border border-slate-200 bg-white p-6 text-center shadow-sm">
       <h2 class="text-xl font-bold text-slate-950">Document not found</h2>
       <p class="mt-2 text-sm text-slate-500">The selected document could not be found.</p>
       <RouterLink to="/admin/documents" class="mt-5 inline-flex rounded-md bg-indigo-700 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-800">

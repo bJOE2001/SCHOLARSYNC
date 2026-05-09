@@ -1,14 +1,18 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import DataTable from '../../components/ui/DataTable.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
-import { complianceRecords } from '../../data/sampleData'
+import { api, getCurrentUser } from '../../services/api'
 
 const searchQuery = ref('')
 const selectedStatus = ref('All')
 const selectedRisk = ref('All')
+const complianceRecords = ref([])
+const loading = ref(true)
+const errorMessage = ref('')
+const currentUser = getCurrentUser()
 
 const statusOptions = ['All', 'Compliant', 'Needs Monitoring', 'At Risk']
 const riskOptions = ['All', 'Low', 'Medium', 'High']
@@ -24,7 +28,7 @@ const columns = [
 const filteredScholars = computed(() => {
   const query = searchQuery.value.toLowerCase().trim()
 
-  return complianceRecords.filter((record) => {
+  return complianceRecords.value.filter((record) => {
     const matchesSearch = record.scholarName.toLowerCase().includes(query)
     const matchesStatus = selectedStatus.value === 'All' || record.complianceStatus === selectedStatus.value
     const matchesRisk = selectedRisk.value === 'All' || record.riskLevel === selectedRisk.value
@@ -46,6 +50,21 @@ const averageGpa = computed(() => {
 const highRiskCount = computed(() => {
   return filteredScholars.value.filter((record) => record.riskLevel === 'High').length
 })
+
+async function loadScholars() {
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    complianceRecords.value = await api.listComplianceRecords()
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadScholars)
 </script>
 
 <template>
@@ -53,11 +72,15 @@ const highRiskCount = computed(() => {
     sidebar-title="ScholarSync"
     sidebar-subtitle="Officer Portal"
     :sidebar-items="adminNavigation"
-    user-name="Dr. Camille Navarro"
+    :user-name="currentUser?.name || 'Scholarship Officer'"
     context="Scholars"
     role-label="Scholarship Officer"
-    :notification-count="8"
+    :notification-count="0"
   >
+    <section v-if="errorMessage" class="mb-5 rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+      {{ errorMessage }}
+    </section>
+
     <section class="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
       <div class="grid gap-4 lg:grid-cols-[1fr_220px_180px]">
         <label class="block">
@@ -94,7 +117,12 @@ const highRiskCount = computed(() => {
     </section>
 
     <section class="mt-6">
+      <p v-if="loading" class="rounded-md border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">
+        Loading scholars...
+      </p>
+
       <DataTable
+        v-else
         :columns="columns"
         :rows="filteredScholars"
         :initial-per-page="2"

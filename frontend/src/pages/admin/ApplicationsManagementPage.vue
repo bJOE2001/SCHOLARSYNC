@@ -1,13 +1,17 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import DashboardLayout from '../../layouts/DashboardLayout.vue'
 import DataTable from '../../components/ui/DataTable.vue'
 import StatusBadge from '../../components/ui/StatusBadge.vue'
 import { adminNavigation } from '../../data/navigation'
-import { applications } from '../../data/sampleData'
+import { api, getCurrentUser } from '../../services/api'
 
 const searchQuery = ref('')
 const selectedStatus = ref('All')
+const applications = ref([])
+const loading = ref(true)
+const errorMessage = ref('')
+const currentUser = getCurrentUser()
 
 const statusOptions = ['All', 'Pending', 'Under Review', 'Approved', 'Rejected', 'For Revision']
 const columns = [
@@ -21,7 +25,7 @@ const columns = [
 const filteredApplications = computed(() => {
   const query = searchQuery.value.toLowerCase()
 
-  return applications.filter((application) => {
+  return applications.value.filter((application) => {
     const matchesSearch =
       application.applicantName.toLowerCase().includes(query) ||
       application.program.toLowerCase().includes(query)
@@ -30,6 +34,40 @@ const filteredApplications = computed(() => {
     return matchesSearch && matchesStatus
   })
 })
+
+async function loadApplications() {
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    applications.value = await api.listApplications()
+  } catch (error) {
+    errorMessage.value = error.message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function setApplicationStatus(application, status) {
+  errorMessage.value = ''
+
+  try {
+    const updated = await api.updateApplicationStatus(application.id, {
+      status,
+      remarks: status === 'Approved'
+        ? 'Approved for the current scholarship cycle.'
+        : status === 'Rejected'
+          ? 'Application was rejected after review.'
+          : 'Please revise the flagged requirements.',
+    })
+
+    applications.value = applications.value.map((item) => item.id === updated.id ? updated : item)
+  } catch (error) {
+    errorMessage.value = error.message
+  }
+}
+
+onMounted(loadApplications)
 </script>
 
 <template>
@@ -37,11 +75,15 @@ const filteredApplications = computed(() => {
     sidebar-title="ScholarSync"
     sidebar-subtitle="Officer Portal"
     :sidebar-items="adminNavigation"
-    user-name="Dr. Camille Navarro"
+    :user-name="currentUser?.name || 'Scholarship Officer'"
     context="Applications Management"
     role-label="Scholarship Officer"
-    :notification-count="8"
+    :notification-count="0"
   >
+    <section v-if="errorMessage" class="mb-5 rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+      {{ errorMessage }}
+    </section>
+
     <section class="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
       <div class="grid gap-4 lg:grid-cols-[1fr_220px]">
         <label class="block">
@@ -67,7 +109,11 @@ const filteredApplications = computed(() => {
     </section>
 
     <section class="mt-6">
-      <DataTable :columns="columns" :rows="filteredApplications">
+      <p v-if="loading" class="rounded-md border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-500 shadow-sm">
+        Loading applications...
+      </p>
+
+      <DataTable v-else :columns="columns" :rows="filteredApplications">
         <template #cell-status="{ value }">
           <StatusBadge :status="String(value)" />
         </template>
@@ -79,9 +125,9 @@ const filteredApplications = computed(() => {
             >
               View
             </RouterLink>
-            <button type="button" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700">Approve</button>
-            <button type="button" class="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700">Reject</button>
-            <button type="button" class="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600">Request Revision</button>
+            <button type="button" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700" @click="setApplicationStatus(row, 'Approved')">Approve</button>
+            <button type="button" class="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700" @click="setApplicationStatus(row, 'Rejected')">Reject</button>
+            <button type="button" class="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600" @click="setApplicationStatus(row, 'For Revision')">Request Revision</button>
           </div>
         </template>
       </DataTable>
