@@ -8,16 +8,9 @@ const router = useRouter()
 const route = useRoute()
 const email = ref('')
 const password = ref('')
-const role = ref('student')
 const isSubmitting = ref(false)
 const errorMessage = ref('')
 
-const roleOptions = [
-  { label: 'Student', value: 'student' },
-  { label: 'Administrator', value: 'administrator' },
-]
-
-const dashboardPath = computed(() => (role.value === 'administrator' ? '/admin/dashboard' : '/student/dashboard'))
 const registrationLink = computed(() => ({
   path: '/register',
   query: {
@@ -26,9 +19,11 @@ const registrationLink = computed(() => ({
   },
 }))
 
-const postLoginRoute = computed(() => {
-  if (role.value !== 'student' || !route.query.redirect) {
-    return dashboardPath.value
+function getPostLoginRoute(userRole) {
+  const dashboardPath = userRole === 'administrator' ? '/admin/dashboard' : '/student/dashboard'
+
+  if (userRole !== 'student' || !route.query.redirect) {
+    return dashboardPath
   }
 
   return {
@@ -37,20 +32,19 @@ const postLoginRoute = computed(() => {
       program: route.query.program,
     },
   }
-})
+}
 
 async function submitLogin() {
   errorMessage.value = ''
   isSubmitting.value = true
 
   try {
-    await api.login({
+    const session = await api.login({
       email: email.value,
       password: password.value,
-      role: role.value,
     })
 
-    router.push(postLoginRoute.value)
+    router.push(getPostLoginRoute(session.user?.role))
   } catch (error) {
     errorMessage.value = error.message
   } finally {
@@ -83,12 +77,6 @@ async function submitLogin() {
           label="Password"
           type="password"
           placeholder="Enter your password"
-        />
-        <FormInput
-          id="login-role"
-          v-model="role"
-          label="Role"
-          :options="roleOptions"
         />
 
         <p v-if="errorMessage" class="rounded-md bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">

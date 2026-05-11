@@ -97,10 +97,6 @@ onMounted(loadDashboard)
       <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p class="text-sm font-bold uppercase tracking-[0.18em] text-indigo-700">Available Scholarship Programs</p>
-          <h2 class="mt-2 text-xl font-bold text-slate-950">Choose a program to apply</h2>
-          <p class="mt-2 text-sm leading-6 text-slate-500">
-            Review open scholarship programs and start an application for the grant that matches your qualifications.
-          </p>
         </div>
         <RouterLink to="/student/application" class="inline-flex justify-center rounded-md border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">
           Open Application Form

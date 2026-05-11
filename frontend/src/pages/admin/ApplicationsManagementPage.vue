@@ -13,6 +13,7 @@ const applications = ref([])
 const loading = ref(true)
 const updatingStatus = ref(false)
 const pendingStatusChange = ref(null)
+const revisionReason = ref('')
 const errorMessage = ref('')
 const currentUser = getCurrentUser()
 
@@ -67,9 +68,12 @@ const statusDialogTone = computed(() => {
 
   return 'primary'
 })
+const isRevisionRequest = computed(() => pendingStatusChange.value?.status === 'For Revision')
+const hasRevisionReason = computed(() => revisionReason.value.trim().length > 0)
 
 function openStatusConfirmation(application, status) {
   errorMessage.value = ''
+  revisionReason.value = ''
   pendingStatusChange.value = { application, status }
 }
 
@@ -79,6 +83,7 @@ function closeStatusConfirmation() {
   }
 
   pendingStatusChange.value = null
+  revisionReason.value = ''
 }
 
 async function loadApplications() {
@@ -94,24 +99,34 @@ async function loadApplications() {
   }
 }
 
-async function setApplicationStatus(application, status) {
+function applicationStatusRemarks(status, reason = '') {
+  if (status === 'Approved') {
+    return 'Approved for the current scholarship cycle.'
+  }
+
+  if (status === 'Rejected') {
+    return 'Application was rejected after review.'
+  }
+
+  return reason.trim() || 'Please revise the flagged requirements.'
+}
+
+async function setApplicationStatus(application, status, reason = '') {
   errorMessage.value = ''
   updatingStatus.value = true
 
   try {
     const updated = await api.updateApplicationStatus(application.id, {
       status,
-      remarks: status === 'Approved'
-        ? 'Approved for the current scholarship cycle.'
-        : status === 'Rejected'
-          ? 'Application was rejected after review.'
-          : 'Please revise the flagged requirements.',
+      remarks: applicationStatusRemarks(status, reason),
     })
 
     applications.value = applications.value.map((item) => item.id === updated.id ? updated : item)
     pendingStatusChange.value = null
+    revisionReason.value = ''
   } catch (error) {
     pendingStatusChange.value = null
+    revisionReason.value = ''
     errorMessage.value = error.message
   } finally {
     updatingStatus.value = false
@@ -123,7 +138,17 @@ function confirmStatusChange() {
     return
   }
 
-  setApplicationStatus(pendingStatusChange.value.application, pendingStatusChange.value.status)
+  if (isRevisionRequest.value && !hasRevisionReason.value) {
+    return
+  }
+
+  setApplicationStatus(pendingStatusChange.value.application, pendingStatusChange.value.status, revisionReason.value)
+}
+
+function handleApplicationTableAction({ action, row }) {
+  if (['Approved', 'Rejected', 'For Revision'].includes(action)) {
+    openStatusConfirmation(row, action)
+  }
 }
 
 onMounted(loadApplications)
@@ -172,7 +197,7 @@ onMounted(loadApplications)
         Loading applications...
       </p>
 
-      <DataTable v-else :columns="columns" :rows="filteredApplications">
+      <DataTable v-else :columns="columns" :rows="filteredApplications" @row-action="handleApplicationTableAction">
         <template #cell-status="{ value }">
           <StatusBadge :status="String(value)" />
         </template>
@@ -184,9 +209,9 @@ onMounted(loadApplications)
             >
               View
             </RouterLink>
-            <button type="button" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700" @click="openStatusConfirmation(row, 'Approved')">Approve</button>
-            <button type="button" class="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700" @click="openStatusConfirmation(row, 'Rejected')">Reject</button>
-            <button type="button" class="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600" @click="openStatusConfirmation(row, 'For Revision')">Request Revision</button>
+            <button type="button" data-table-action="Approved" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700">Approve</button>
+            <button type="button" data-table-action="Rejected" class="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700">Reject</button>
+            <button type="button" data-table-action="For Revision" class="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600">Request Revision</button>
           </div>
         </template>
       </DataTable>
@@ -201,7 +226,19 @@ onMounted(loadApplications)
     cancel-label="Cancel"
     :tone="statusDialogTone"
     :loading="updatingStatus"
+    :confirm-disabled="isRevisionRequest && !hasRevisionReason"
     @confirm="confirmStatusChange"
     @close="closeStatusConfirmation"
-  />
+  >
+    <label v-if="isRevisionRequest" class="block">
+      <span class="mb-2 block text-sm font-bold text-slate-700">Reason for revision</span>
+      <textarea
+        v-model="revisionReason"
+        rows="4"
+        class="w-full resize-none rounded-md border border-slate-200 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+        placeholder="Explain what the applicant needs to revise."
+      ></textarea>
+      <span v-if="!hasRevisionReason" class="mt-2 block text-xs font-semibold text-amber-700">A revision reason is required.</span>
+    </label>
+  </ConfirmationDialog>
 </template>
