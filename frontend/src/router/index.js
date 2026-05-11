@@ -12,8 +12,6 @@ import AdminDashboardPage from '../pages/admin/AdminDashboardPage.vue'
 import ScholarshipManagementPage from '../pages/admin/ScholarshipManagementPage.vue'
 import ApplicationsManagementPage from '../pages/admin/ApplicationsManagementPage.vue'
 import ApplicationViewPage from '../pages/admin/ApplicationViewPage.vue'
-import DocumentReviewPage from '../pages/admin/DocumentReviewPage.vue'
-import DocumentViewPage from '../pages/admin/DocumentViewPage.vue'
 import ComplianceMonitoringPage from '../pages/admin/ComplianceMonitoringPage.vue'
 import PredictiveAnalyticsPage from '../pages/admin/PredictiveAnalyticsPage.vue'
 import ReportsPage from '../pages/admin/ReportsPage.vue'
@@ -43,8 +41,6 @@ const routes = [
   { path: '/admin/scholarships', name: 'admin-scholarships', component: ScholarshipManagementPage },
   { path: '/admin/applications', name: 'admin-applications', component: ApplicationsManagementPage },
   { path: '/admin/applications/:id', name: 'admin-application-view', component: ApplicationViewPage },
-  { path: '/admin/documents', name: 'admin-documents', component: DocumentReviewPage },
-  { path: '/admin/documents/:id', name: 'admin-document-view', component: DocumentViewPage },
   { path: '/admin/scholars', name: 'admin-scholars', component: ScholarsPage },
   { path: '/admin/compliance', name: 'admin-compliance', component: ComplianceMonitoringPage },
   { path: '/admin/analytics', name: 'admin-analytics', component: PredictiveAnalyticsPage },
